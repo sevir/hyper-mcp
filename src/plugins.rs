@@ -11,13 +11,13 @@ use std::str::FromStr;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct PluginService {
     config: Config,
-    plugins: Arc<RwLock<HashMap<String, Plugin>>>,
+    plugins: Arc<RwLock<HashMap<String, Arc<Mutex<Plugin>>>>>,
     tool_plugin_map: Arc<RwLock<HashMap<String, String>>>,
     oci_downloader: Arc<OciDownloader>,
 }
@@ -122,11 +122,18 @@ impl PluginService {
                     }
                 }
             }
-            let mut plugin = Plugin::new(&manifest, [], true).unwrap();
+            let plugin = Arc::new(Mutex::new(Plugin::new(&manifest, [], true).unwrap()));
+            let plugin_clone = Arc::clone(&plugin);
 
             // Try to get tool information from the plugin and populate the cache
-            if let Ok(result) = plugin.call::<&str, &str>("describe", "") {
-                if let Ok(parsed) = serde_json::from_str::<ListToolsResult>(result) {
+            let describe_result = tokio::task::spawn_blocking(move || {
+                let mut plugin = plugin_clone.lock().unwrap();
+                plugin.call::<&str, String>("describe", "")
+            })
+            .await;
+
+            if let Ok(Ok(result)) = describe_result {
+                if let Ok(parsed) = serde_json::from_str::<ListToolsResult>(&result) {
                     let mut cache = self.tool_plugin_map.write().await;
                     let skip_tools = plugin_cfg
                         .runtime_config
@@ -189,7 +196,7 @@ impl ServerHandler for PluginService {
         request: CallToolRequestParam,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let mut plugins = self.plugins.write().await;
+        let plugins = self.plugins.read().await;
         let tool_cache = self.tool_plugin_map.read().await;
 
         let tool_name = request.name.clone();
@@ -201,23 +208,35 @@ impl ServerHandler for PluginService {
 
         // Check if the tool exists in the cache
         if let Some(plugin_name) = tool_cache.get(&tool_name.to_string()) {
-            if let Some(plugin) = plugins.get_mut(plugin_name) {
-                return match plugin.call::<&str, &str>("call", &json_string) {
-                    Ok(result) => match serde_json::from_str::<CallToolResult>(result) {
+            if let Some(plugin_arc) = plugins.get(plugin_name) {
+                let plugin_clone = Arc::clone(plugin_arc);
+                let plugin_name_clone = plugin_name.clone();
+
+                let result = tokio::task::spawn_blocking(move || {
+                    let mut plugin = plugin_clone.lock().unwrap();
+                    plugin.call::<&str, String>("call", &json_string)
+                })
+                .await;
+
+                return match result {
+                    Ok(Ok(result)) => match serde_json::from_str::<CallToolResult>(&result) {
                         Ok(parsed) => Ok(parsed),
-                        Err(e) => {
-                            return Err(McpError::internal_error(
-                                format!("Failed to deserialize data: {}", e),
-                                None,
-                            ));
-                        }
-                    },
-                    Err(e) => {
-                        return Err(McpError::internal_error(
-                            format!("Failed to execute plugin {}: {}", plugin_name, e),
+                        Err(e) => Err(McpError::internal_error(
+                            format!("Failed to deserialize data: {}", e),
                             None,
-                        ));
-                    }
+                        )),
+                    },
+                    Ok(Err(e)) => Err(McpError::internal_error(
+                        format!("Failed to execute plugin {}: {}", plugin_name_clone, e),
+                        None,
+                    )),
+                    Err(e) => Err(McpError::internal_error(
+                        format!(
+                            "Failed to spawn blocking task for plugin {}: {}",
+                            plugin_name_clone, e
+                        ),
+                        None,
+                    )),
                 };
             }
         }
@@ -231,7 +250,7 @@ impl ServerHandler for PluginService {
         _context: RequestContext<RoleServer>,
     ) -> std::result::Result<ListToolsResult, McpError> {
         tracing::info!("got tools/list request {:?}", request);
-        let mut plugins = self.plugins.write().await;
+        let plugins = self.plugins.write().await;
         let mut tool_cache = self.tool_plugin_map.write().await;
 
         let mut payload = ListToolsResult::default();
@@ -240,10 +259,19 @@ impl ServerHandler for PluginService {
         tool_cache.clear();
 
         for plugin_cfg in &self.config.plugins {
-            if let Some(plugin) = plugins.get_mut(&plugin_cfg.name) {
-                match plugin.call::<&str, &str>("describe", "") {
-                    Ok(result) => {
-                        if let Ok(parsed) = serde_json::from_str::<ListToolsResult>(result) {
+            if let Some(plugin_arc) = plugins.get(&plugin_cfg.name) {
+                let plugin_clone = Arc::clone(plugin_arc);
+                let plugin_name = plugin_cfg.name.clone();
+
+                let result = tokio::task::spawn_blocking(move || {
+                    let mut plugin = plugin_clone.lock().unwrap();
+                    plugin.call::<&str, String>("describe", "")
+                })
+                .await;
+
+                match result {
+                    Ok(Ok(result)) => {
+                        if let Ok(parsed) = serde_json::from_str::<ListToolsResult>(&result) {
                             let skip_tools = plugin_cfg
                                 .runtime_config
                                 .as_ref()
@@ -262,8 +290,11 @@ impl ServerHandler for PluginService {
                             }
                         }
                     }
+                    Ok(Err(e)) => {
+                        log::error!("tool {} describe() error: {}", plugin_name, e);
+                    }
                     Err(e) => {
-                        log::error!("tool {} describe() error: {}", plugin_cfg.name, e);
+                        log::error!("tool {} spawn_blocking error: {}", plugin_name, e);
                     }
                 }
             }

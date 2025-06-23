@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
             );
 
             let service = StreamableHttpService::new(
-                move || plugin_service.clone(),
+                move || Ok(plugin_service.clone()),
                 LocalSessionManager::default().into(),
                 Default::default(),
             );

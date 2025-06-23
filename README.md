@@ -136,6 +136,8 @@ We maintain several example plugins to get you started:
 - [meme-generator](https://github.com/tuananh/hyper-mcp/tree/main/examples/plugins/meme-generator): Meme generator (Rust)
 - [context7](https://github.com/tuananh/hyper-mcp/tree/main/examples/plugins/context7): Lookup library documentation (Rust)
 - [think](https://github.com/tuananh/hyper-mcp/tree/main/examples/plugins/think): Think tool(Rust)
+- [maven](https://github.com/tuananh/hyper-mcp/tree/main/examples/plugins/maven): Maven plugin (Rust)
+- [serper](https://github.com/tuananh/hyper-mcp/tree/main/examples/plugins/serper): Serper web search plugin (Rust)
 
 
 ### Community-built plugins
