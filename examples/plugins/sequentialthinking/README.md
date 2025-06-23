@@ -30,7 +30,7 @@ This tool helps analyze problems through a flexible thinking process that can ad
     "plugins": [
         {
             "name": "sequentialthinking",
-            "path": "oci://ghcr.io/tuananh/sequentialthinking-plugin:latest"
+            "path": "oci://ghcr.io/sevir/sequentialthinking-plugin:latest"
         }
     ]
 }
