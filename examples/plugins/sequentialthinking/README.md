@@ -87,3 +87,21 @@ The plugin follows the sequential thinking methodology allowing for:
 3. Branching into alternative approaches
 4. Dynamic adjustment of the total thought count
 5. Verification and hypothesis testing
+
+## Tasks
+
+### test:build
+
+Try to build with docker
+
+```bash
+docker build -t ghcr.io/sevir/sequentialthinking-plugin:latest .
+```
+
+### registry:upload
+
+Upload to the registry
+
+```bash
+docker push ghcr.io/sevir/sequentialthinking-plugin:latest
+```
