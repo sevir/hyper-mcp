@@ -42,7 +42,6 @@
         'rust',
       ],
       commitMessagePrefix: 'rust',
-      "rangeStrategy": "pin",
     },
   ],
   prHourlyLimit: 4,

@@ -24,7 +24,7 @@ jobs:
       id-token: write # needed for keyless signing
     
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
           submodules: true
@@ -33,17 +33,17 @@ jobs:
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@fb28c2b6339dcd94da6e4cbcbc5e888961f6f8c3 # v3.9.0
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to DockerHub Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: docker.io
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
@@ -84,7 +84,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
 
@@ -105,12 +105,19 @@ jobs:
           - os: ubuntu-24.04
             arch: x86_64
             target: x86_64-unknown-linux-gnu
+            ext: ""
           - os: ubuntu-24.04-arm
             arch: aarch64
             target: aarch64-unknown-linux-gnu
+            ext: ""
           - os: macos-latest
             arch: aarch64
             target: aarch64-apple-darwin
+            ext: ""
+          - os: windows-latest
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+            ext: ".exe"
 
     runs-on: ${{ matrix.os }}
     permissions:
@@ -118,7 +125,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
 
@@ -134,29 +141,44 @@ jobs:
 
       - name: Build
         run: cargo auditable build --target ${{ matrix.target }} --release
+ 
+      - name: Install zip (Windows only)
+        if: runner.os == 'Windows'
+        run: choco install zip -y
 
-      # TODO: figure out how to do cross build
       - name: Create archives and checksums
+        shell: bash
         run: |
-          # Create directories for archives
           mkdir -p dist/${{ matrix.target }}
-          
-          cp target/${{ matrix.target }}/release/hyper-mcp dist/${{ matrix.target }}/
-          cd dist/${{ matrix.target }} && tar -czf ../hyper-mcp-${{ matrix.target }}.tar.gz hyper-mcp
+
+          bin_name="hyper-mcp${{ matrix.ext }}"
+          cp target/${{ matrix.target }}/release/$bin_name dist/${{ matrix.target }}/
+
+          cd dist/${{ matrix.target }}
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            zip ../hyper-mcp-${{ matrix.target }}.zip $bin_name
+          else
+            tar -czf ../hyper-mcp-${{ matrix.target }}.tar.gz $bin_name
+          fi
           cd ..
-          
+
           {
-            echo "hyper-mcp-${{ matrix.target }}.tar.gz:"
-            if command -v sha256sum >/dev/null 2>&1; then
-              sha256sum hyper-mcp-${{ matrix.target }}.tar.gz
+            if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+              file="hyper-mcp-${{ matrix.target }}.zip"
             else
-              shasum -a 256 hyper-mcp-${{ matrix.target }}.tar.gz
+              file="hyper-mcp-${{ matrix.target }}.tar.gz"
             fi
-          } > checksums.txt
+            echo "$file:"
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum $file
+            else
+              shasum -a 256 $file
+            fi
+          } > checksums-${{ matrix.target }}.txt
 
       - name: Create new nightly release
         id: create_release
-        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
+        uses: softprops/action-gh-release@6cbd405e2c4e67a21c47fa9e383d020e4e28b836 # v2.3.3
         with:
           tag_name: nightly
           name: Nightly build
@@ -164,7 +186,8 @@ jobs:
           prerelease: true
           files: |
             dist/hyper-mcp-${{ matrix.target }}.tar.gz
-            dist/checksums.txt
+            dist/hyper-mcp-${{ matrix.target }}.zip
+            dist/checksums-${{ matrix.target }}.txt
           body: |
             Nightly build from `main` branch.
             
@@ -189,23 +212,23 @@ jobs:
       packages: write
       id-token: write # needed for keyless signing
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@fb28c2b6339dcd94da6e4cbcbc5e888961f6f8c3 # v3.9.0
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
         
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to DockerHub Registry
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: docker.io
           username: ${{ secrets.DOCKER_HUB_USERNAME }}

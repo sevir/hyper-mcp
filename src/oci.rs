@@ -61,10 +61,7 @@ fn build_auth(reference: &Reference) -> RegistryAuth {
         Err(CredentialRetrievalError::ConfigNotFound) => RegistryAuth::Anonymous,
         Err(CredentialRetrievalError::NoCredentialConfigured) => RegistryAuth::Anonymous,
         Err(e) => {
-            log::info!(
-                "Error retrieving docker credentials: {}. Using anonymous auth",
-                e
-            );
+            log::info!("Error retrieving docker credentials: {e}. Using anonymous auth");
             RegistryAuth::Anonymous
         }
         Ok(DockerCredential::UsernamePassword(username, password)) => {
@@ -87,7 +84,12 @@ async fn setup_trust_repository(cli: &Cli) -> Result<Box<dyn TrustRoot>, anyhow:
         match SigstoreTrustRoot::new(None).await {
             Ok(repo) => return Ok(Box::new(repo)),
             Err(e) => {
-                log::warn!("Failed to initialize TUF trust repository: {}", e);
+                log::error!("Failed to initialize TUF trust repository: {e}");
+                if !cli.insecure_skip_signature {
+                    return Err(anyhow!(
+                        "Failed to initialize TUF trust repository and signature verification is required"
+                    ));
+                }
                 log::info!("Falling back to manual trust repository");
             }
         }
@@ -104,10 +106,10 @@ async fn setup_trust_repository(cli: &Cli) -> Result<Box<dyn TrustRoot>, anyhow:
                     log::info!("Added Rekor public key");
                     data.rekor_keys.push(content);
                 }
-                Err(e) => log::warn!("Failed to read Rekor public keys file: {}", e),
+                Err(e) => log::warn!("Failed to read Rekor public keys file: {e}"),
             }
         } else {
-            log::warn!("Rekor public keys file not found: {:?}", rekor_keys_path);
+            log::warn!("Rekor public keys file not found: {rekor_keys_path:?}");
         }
     }
 
@@ -126,16 +128,13 @@ async fn setup_trust_repository(cli: &Cli) -> Result<Box<dyn TrustRoot>, anyhow:
                             log::info!("Added Fulcio certificate");
                             data.fulcio_certs.push(cert);
                         }
-                        Err(e) => log::warn!("Failed to parse Fulcio certificate: {}", e),
+                        Err(e) => log::warn!("Failed to parse Fulcio certificate: {e}"),
                     }
                 }
-                Err(e) => log::warn!("Failed to read Fulcio certificates file: {}", e),
+                Err(e) => log::warn!("Failed to read Fulcio certificates file: {e}"),
             }
         } else {
-            log::warn!(
-                "Fulcio certificates file not found: {:?}",
-                fulcio_certs_path
-            );
+            log::warn!("Fulcio certificates file not found: {fulcio_certs_path:?}");
         }
     }
 
@@ -143,7 +142,7 @@ async fn setup_trust_repository(cli: &Cli) -> Result<Box<dyn TrustRoot>, anyhow:
 }
 
 async fn verify_image_signature(cli: &Cli, image_reference: &str) -> Result<bool, anyhow::Error> {
-    log::info!("Verifying signature for {}", image_reference);
+    log::info!("Verifying signature for {image_reference}");
 
     // Set up the trust repository based on CLI arguments
     let repo = setup_trust_repository(cli).await?;
@@ -175,7 +174,7 @@ async fn verify_image_signature(cli: &Cli, image_reference: &str) -> Result<bool
         match client.triangulate(&image_ref, auth).await {
             Ok((sig_image, digest)) => (sig_image, digest),
             Err(e) => {
-                log::warn!("Failed to triangulate image: {}", e);
+                log::warn!("Failed to triangulate image: {e}");
                 return Ok(false); // No signatures found
             }
         };
@@ -187,13 +186,13 @@ async fn verify_image_signature(cli: &Cli, image_reference: &str) -> Result<bool
     {
         Ok(layers) => layers,
         Err(e) => {
-            log::warn!("Failed to get trusted signature layers: {}", e);
+            log::warn!("Failed to get trusted signature layers: {e}");
             return Ok(false);
         }
     };
 
     if signature_layers.is_empty() {
-        log::warn!("No valid signatures found for {}", image_reference);
+        log::warn!("No valid signatures found for {image_reference}");
         return Ok(false);
     }
 
@@ -229,16 +228,14 @@ async fn verify_image_signature(cli: &Cli, image_reference: &str) -> Result<bool
     // Verify the constraints
     match verify_constraints(&signature_layers, verification_constraints.iter()) {
         Ok(()) => {
-            log::info!("Signature verification successful for {}", image_reference);
+            log::info!("Signature verification successful for {image_reference}");
             Ok(true)
         }
         Err(SigstoreVerifyConstraintsError {
             unsatisfied_constraints,
         }) => {
             log::warn!(
-                "Signature verification failed for {}: {:?}",
-                image_reference,
-                unsatisfied_constraints
+                "Signature verification failed for {image_reference}: {unsatisfied_constraints:?}"
             );
             Ok(false)
         }
@@ -247,46 +244,41 @@ async fn verify_image_signature(cli: &Cli, image_reference: &str) -> Result<bool
 
 pub async fn pull_and_extract_oci_image(
     cli: &Cli,
+    client: &Client,
     image_reference: &str,
     target_file_path: &str,
     local_output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if Path::new(local_output_path).exists() {
         log::info!(
-            "Plugin {} already cached at: {}. Skipping downloading.",
-            image_reference,
-            local_output_path
+            "Plugin {image_reference} already cached at: {local_output_path}. Skipping downloading."
         );
         return Ok(());
     }
 
-    log::info!("Pulling {} ...", image_reference);
-
-    let client_config = oci_client::client::ClientConfig::default();
-    let client = Client::new(client_config);
+    log::info!("Pulling {image_reference} ...");
 
     let reference = Reference::try_from(image_reference)?;
     let auth = build_auth(&reference);
 
     // Verify the image signature if it's an OCI image and verification is enabled
     if !cli.insecure_skip_signature {
-        log::info!("Signature verification enabled for {}", image_reference);
+        log::info!("Signature verification enabled for {image_reference}");
         match verify_image_signature(cli, image_reference).await {
             Ok(verified) => {
                 if !verified {
                     return Err(format!(
-                        "No valid signatures found for the image {}",
-                        image_reference
+                        "No valid signatures found for the image {image_reference}"
                     )
                     .into());
                 }
             }
             Err(e) => {
-                return Err(format!("Image signature verification failed: {}", e).into());
+                return Err(format!("Image signature verification failed: {e}").into());
             }
         }
     } else {
-        log::warn!("Signature verification disabled for {}", image_reference);
+        log::warn!("Signature verification disabled for {image_reference}");
     }
 
     // Accept both OCI and Docker manifest types
@@ -327,40 +319,15 @@ pub async fn pull_and_extract_oci_image(
                             let mut content = Vec::new();
                             entry.read_to_end(&mut content)?;
                             fs::write(local_output_path, content)?;
-                            log::info!("Successfully extracted to: {}", local_output_path);
+                            log::info!("Successfully extracted to: {local_output_path}");
                             return Ok(());
                         }
                     }
                 }
-                Err(e) => log::info!("Error during extraction: {}", e),
+                Err(e) => log::info!("Error during extraction: {e}"),
             }
         }
     }
 
     Err("Target file not found in any layer".into())
-}
-
-pub struct OciDownloader {
-    cli: Cli,
-}
-
-impl OciDownloader {
-    pub fn new(cli: &Cli) -> Self {
-        Self { cli: cli.clone() }
-    }
-
-    pub async fn pull_and_extract(
-        &self,
-        image_reference: &str,
-        target_file_path: &str,
-        local_output_path: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        pull_and_extract_oci_image(
-            &self.cli,
-            image_reference,
-            target_file_path,
-            local_output_path,
-        )
-        .await
-    }
 }

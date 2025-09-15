@@ -1,30 +1,25 @@
 {
-  "plugins": [
-    {
-      "name": "time",
-      "path": "oci://ghcr.io/tuananh/time-plugin:latest"
+  "plugins": {
+    "time": {
+      "url": "oci://ghcr.io/tuananh/time-plugin:latest"
     },
-    {
-      "name": "qr-code",
-      "path": "oci://ghcr.io/tuananh/qrcode-plugin:latest"
+    "qr-code": {
+      "url": "oci://ghcr.io/tuananh/qrcode-plugin:latest"
     },
-    {
-      "name": "hash",
-      "path": "oci://ghcr.io/tuananh/hash-plugin:latest"
+    "hash": {
+      "url": "oci://ghcr.io/tuananh/hash-plugin:latest"
     },
-    {
-      "name": "myip",
-      "path": "oci://ghcr.io/tuananh/myip-plugin:latest",
+    "myip": {
+      "url": "oci://ghcr.io/tuananh/myip-plugin:latest",
       "runtime_config": {
         "allowed_hosts": ["1.1.1.1"]
       }
     },
-    {
-      "name": "fetch",
-      "path": "oci://ghcr.io/tuananh/fetch-plugin:latest",
+    "fetch": {
+      "url": "oci://ghcr.io/tuananh/fetch-plugin:latest",
       "runtime_config": {
         "allowed_hosts": ["*"]
       }
     }
-  ]
+  }
 }

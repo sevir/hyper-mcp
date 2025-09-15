@@ -25,3 +25,6 @@ renovate:
         -e LOG_LEVEL=info \
         -v "$(pwd)/.github/renovate.json5:/usr/src/app/config.json" \
         renovate/renovate tuananh/hyper-mcp
+
+install:
+    sudo install -Dm755 target/debug/hyper-mcp /usr/local/bin/hyper-mcp
