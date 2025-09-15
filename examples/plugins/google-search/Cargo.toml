@@ -1,0 +1,16 @@
+[package]
+edition = "2024"
+name = "google-search"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+name = "plugin"
+
+[dependencies]
+base64 = "0.22.1"
+base64-serde = "0.8.0"
+extism-pdk = "=1.4.0"
+serde = {version = "1.0.219", features = ["derive"]}
+serde_json = "1.0.140"
+urlencoding = "2.1.3"
