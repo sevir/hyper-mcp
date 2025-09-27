@@ -2,7 +2,7 @@ name: Nightly Release
 
 on:
   schedule:
-    - cron: '0 17 * * *' # midnight GMT+7
+    - cron: "0 17 * * *" # midnight GMT+7
   workflow_dispatch:
 
 env:
@@ -22,7 +22,7 @@ jobs:
       contents: write
       packages: write
       id-token: write # needed for keyless signing
-    
+
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
@@ -133,7 +133,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      
+
       - run: cargo install cargo-auditable
 
       - name: Install compilation targets
@@ -141,7 +141,7 @@ jobs:
 
       - name: Build
         run: cargo auditable build --target ${{ matrix.target }} --release
- 
+
       - name: Install zip (Windows only)
         if: runner.os == 'Windows'
         run: choco install zip -y
@@ -190,18 +190,18 @@ jobs:
             dist/checksums-${{ matrix.target }}.txt
           body: |
             Nightly build from `main` branch.
-            
+
             This release includes:
             - hyper-mcp binaries for Linux & macOS
             - hyper-mcp container image: `ghcr.io/${{ github.repository_owner }}/hyper-mcp:nightly`
             - Plugin images: `ghcr.io/${{ github.repository_owner }}/<plugin-name>-plugin:nightly`
-            
+
             All container images are signed with Cosign. Verify the image like this:
             ```bash
             cosign verify \
-              --certificate-identity "https://github.com/tuananh/hyper-mcp/.github/workflows/nightly.yml@refs/heads/main" \
+              --certificate-identity "https://github.com/${{ github.repository_owner }}/hyper-mcp/.github/workflows/nightly.yml@refs/heads/main" \
               --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              ghcr.io/tuananh/hyper-mcp:nightly
+              ghcr.io/${{ github.repository_owner }}/hyper-mcp:nightly
             ```
 
   create-multiarch-manifests:
@@ -219,7 +219,7 @@ jobs:
 
       - name: Install cosign
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
-        
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
@@ -233,7 +233,7 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
-          
+
       - name: Create and push multi-arch nightly tags
         run: |
           # Main image
@@ -246,8 +246,8 @@ jobs:
 
           # DockerHub
           docker buildx imagetools create \
-            -t tuananh/hyper-mcp:nightly \
-            tuananh/hyper-mcp:nightly-amd64 \
-            tuananh/hyper-mcp:nightly-arm64
+            -t ${{ github.repository_owner }}/hyper-mcp:nightly \
+            ${{ github.repository_owner }}/hyper-mcp:nightly-amd64 \
+            ${{ github.repository_owner }}/hyper-mcp:nightly-arm64
 
-          cosign sign --yes tuananh/hyper-mcp:nightly
+          cosign sign --yes ${{ github.repository_owner }}/hyper-mcp:nightly

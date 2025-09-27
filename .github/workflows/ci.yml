@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
   pull_request:
-    branches: [main]
+    branches: [dev]
   workflow_dispatch:
 
 env:
@@ -48,7 +48,7 @@ jobs:
 
       - name: Build example plugins
         run: |
-          for plugin in qr-code hash myip fetch fs; do
+          for plugin in google-search; do
             echo "Building plugin: $plugin"
             cargo build --release --target wasm32-wasip1 --manifest-path "examples/plugins/$plugin/Cargo.toml"
           done
