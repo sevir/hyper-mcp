@@ -21,12 +21,30 @@ Before using this plugin, you need to:
 
 ## Configuration
 
-The plugin requires these parameters for each search:
+The plugin requires the following configuration:
 
-- `api_key`: Your Bing Search API subscription key
-- `query`: The search query string
+- `BING_API_KEY`: (Required) Your Bing Search API subscription key
 
 ## Usage
+
+```json
+{
+  "plugins": [
+    {
+      "name": "bing-search",
+      "path": "oci://ghcr.io/sevir/hyper-mcp/plugin-bing-search:latest",
+      "runtime_config": {
+        "allowed_hosts": ["api.bing.microsoft.com"],
+        "env_vars": {
+          "BING_API_KEY": "your-bing-api-key-here"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Available Operations
 
 ### Basic Search
 
@@ -34,8 +52,7 @@ The plugin requires these parameters for each search:
 {
   "name": "bing_search",
   "arguments": {
-    "query": "rust programming language",
-    "api_key": "YOUR_SUBSCRIPTION_KEY_HERE"
+    "query": "rust programming language"
   }
 }
 ```
@@ -47,7 +64,6 @@ The plugin requires these parameters for each search:
   "name": "bing_search",
   "arguments": {
     "query": "machine learning tutorials",
-    "api_key": "YOUR_SUBSCRIPTION_KEY_HERE",
     "count": 20,
     "mkt": "en-US",
     "safe_search": "Moderate",
@@ -62,7 +78,6 @@ The plugin requires these parameters for each search:
 ### Required Parameters
 
 - `query` (string): The search query
-- `api_key` (string): Your Bing Search API subscription key
 
 ### Optional Parameters
 

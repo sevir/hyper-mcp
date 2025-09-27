@@ -30,13 +30,32 @@ Before using this plugin, you need to:
 
 ## Configuration
 
-The plugin requires these parameters for each search:
+The plugin requires the following configuration:
 
-- `api_key`: Your Google Custom Search API key
-- `search_engine_id`: Your Custom Search Engine ID (cx parameter)
-- `query`: The search query string
+- `GOOGLE_API_KEY`: (Required) Your Google Custom Search API key
+- `GOOGLE_SEARCH_ENGINE_ID`: (Required) Your Custom Search Engine ID (cx parameter)
 
 ## Usage
+
+```json
+{
+  "plugins": [
+    {
+      "name": "google-search",
+      "path": "oci://ghcr.io/sevir/hyper-mcp/plugin-google-search:latest",
+      "runtime_config": {
+        "allowed_hosts": ["www.googleapis.com"],
+        "env_vars": {
+          "GOOGLE_API_KEY": "your-google-api-key-here",
+          "GOOGLE_SEARCH_ENGINE_ID": "your-search-engine-id-here"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Available Operations
 
 ### Basic Search
 
@@ -44,9 +63,7 @@ The plugin requires these parameters for each search:
 {
   "name": "google_search",
   "arguments": {
-    "query": "rust programming language",
-    "api_key": "YOUR_API_KEY_HERE",
-    "search_engine_id": "YOUR_SEARCH_ENGINE_ID_HERE"
+    "query": "rust programming language"
   }
 }
 ```
@@ -58,8 +75,6 @@ The plugin requires these parameters for each search:
   "name": "google_search",
   "arguments": {
     "query": "machine learning tutorials",
-    "api_key": "YOUR_API_KEY_HERE",
-    "search_engine_id": "YOUR_SEARCH_ENGINE_ID_HERE",
     "num": 5,
     "safe": "active",
     "lr": "lang_en",
@@ -74,8 +89,6 @@ The plugin requires these parameters for each search:
 ### Required Parameters
 
 - `query` (string): The search query
-- `api_key` (string): Your Google Custom Search API key
-- `search_engine_id` (string): Your Custom Search Engine ID
 
 ### Optional Parameters
 

@@ -1,44 +1,79 @@
-# DuckDuckGo Search MCP Plugin
+# DuckDuckGo Search Plugin
 
-A Model Context Protocol (MCP) plugin that provides search capabilities using DuckDuckGo's Instant Answer API.
+A hyper-mcp plugin that provides search capabilities using DuckDuckGo's Instant Answer API.
+
+## Overview
+
+This plugin allows you to perform searches using DuckDuckGo's public Instant Answer API. It returns instant answers, definitions, abstracts, and related topics without requiring any API key.
 
 ## Features
 
-- Perform searches using DuckDuckGo's Instant Answer API
-- Returns instant answers, definitions, and related topics
-- Supports various output formats (JSON, XML)
-- Configurable response formatting options
 - No API key required - uses DuckDuckGo's public API
+- Returns instant answers, definitions, and related topics
+- Supports various output formats and response formatting options
+- Provides abstracts, topics, and related information
+- Safe search enabled by default
 
-## Installation
+## Configuration
 
-1. Ensure you have Rust installed (2024 edition recommended)
-2. Clone the hyper-mcp repository
-3. Navigate to the duckduckgo-search plugin directory:
-   ```bash
-   cd examples/plugins/duckduckgo-search
-   ```
-4. Build the plugin:
-   ```bash
-   cargo build --release
-   ```
+No configuration required - DuckDuckGo's API is free and open.
 
 ## Usage
 
-### Tool: `duckduckgo_search`
+```json
+{
+  "plugins": [
+    {
+      "name": "duckduckgo-search",
+      "path": "oci://ghcr.io/sevir/hyper-mcp/plugin-duckduckgo-search:latest",
+      "runtime_config": {
+        "allowed_hosts": ["api.duckduckgo.com"]
+      }
+    }
+  ]
+}
+```
 
-Performs a search using DuckDuckGo's Instant Answer API and returns instant answers, definitions, and related topics.
+## Available Operations
 
-#### Parameters
+### Basic Search
 
-- `query` (required): The search query string
-- `format` (optional): Response format ("json" or "xml", default: "json")
-- `pretty` (optional): Pretty-print the JSON response (default: false)
-- `no_html` (optional): Remove HTML from text (default: false)
-- `no_redirect` (optional): Do not follow redirects (default: false)
-- `skip_disambig` (optional): Skip disambiguation (default: false)
+```json
+{
+  "name": "duckduckgo_search",
+  "arguments": {
+    "query": "What is the capital of France?"
+  }
+}
+```
 
-#### Example Usage
+### Advanced Search with Options
+
+```json
+{
+  "name": "duckduckgo_search",
+  "arguments": {
+    "query": "machine learning definition",
+    "format": "json",
+    "pretty": true,
+    "no_html": true
+  }
+}
+```
+
+## Parameters
+
+### Required Parameters
+
+- `query` (string): The search query string
+
+### Optional Parameters
+
+- `format` (string): Response format ("json" or "xml", default: "json")
+- `pretty` (boolean): Pretty-print the JSON response (default: false)
+- `no_html` (boolean): Remove HTML from text (default: false)
+- `no_redirect` (boolean): Do not follow redirects (default: false)
+- `skip_disambig` (boolean): Skip disambiguation (default: false)
 
 ```json
 {

@@ -1,46 +1,79 @@
-# Brave Search MCP Plugin
+# Brave Search Plugin
 
-A Model Context Protocol (MCP) plugin that provides web search capabilities using the Brave Search API.
+A hyper-mcp plugin that provides web search capabilities using the Brave Search API.
 
-## Features
+## Overview
 
-- Perform web searches using Brave Search API
-- Configurable search parameters (count, country, language, safe search)
-- Returns formatted search results with titles, URLs, and descriptions
-- Includes discussion results when available
-- Supports pagination and result filtering
+This plugin allows you to perform web searches using Brave's independent search API. It returns formatted search results including titles, URLs, snippets, and discussion results when available.
 
 ## Prerequisites
 
-- A Brave Search API subscription token from [Brave Search API Dashboard](https://api-dashboard.search.brave.com/)
+Before using this plugin, you need to:
 
-## Installation
-
-1. Ensure you have Rust installed (2024 edition recommended)
-2. Clone the hyper-mcp repository
-3. Navigate to the brave-search plugin directory:
-   ```bash
-   cd examples/plugins/brave-search
-   ```
-4. Build the plugin:
-   ```bash
-   cargo build --release
-   ```
+1. **Get Brave Search API Access**: Go to [Brave Search API Dashboard](https://api-dashboard.search.brave.com/)
+2. **Create an Account** and get your API subscription token
+3. **Choose a Plan**: Brave offers free tier with limited searches and paid plans for higher volumes
 
 ## Configuration
 
-The plugin requires a Brave Search API subscription token. You can obtain one from the [Brave Search API Dashboard](https://api-dashboard.search.brave.com/).
+The plugin requires the following configuration:
+
+- `BRAVE_API_KEY`: (Required) Your Brave Search API subscription token
 
 ## Usage
 
-### Tool: `brave_search`
+```json
+{
+  "plugins": [
+    {
+      "name": "brave-search",
+      "path": "oci://ghcr.io/sevir/hyper-mcp/plugin-brave-search:latest",
+      "runtime_config": {
+        "allowed_hosts": ["api.search.brave.com"],
+        "env_vars": {
+          "BRAVE_API_KEY": "your-brave-api-key-here"
+        }
+      }
+    }
+  ]
+}
+```
 
-Performs a web search using the Brave Search API.
+## Available Operations
 
-#### Parameters
+### Basic Search
 
-- `query` (required): The search query string
-- `api_key` (required): Your Brave Search API subscription token
+```json
+{
+  "name": "brave_search",
+  "arguments": {
+    "query": "rust programming language"
+  }
+}
+```
+
+### Advanced Search with Options
+
+```json
+{
+  "name": "brave_search",
+  "arguments": {
+    "query": "machine learning tutorials",
+    "count": 15,
+    "country": "US",
+    "search_lang": "en",
+    "safesearch": "moderate"
+  }
+}
+```
+
+## Parameters
+
+### Required Parameters
+
+- `query` (string): The search query string
+
+### Optional Parameters
 - `count` (optional): Number of results to return (1-20, default: 10)
 - `offset` (optional): Pagination offset (default: 0)
 - `country` (optional): Country code for search results (e.g., "US", "GB", "DE")

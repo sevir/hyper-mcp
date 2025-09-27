@@ -1,6 +1,10 @@
-# Perplexity Search MCP Plugin
+# Perplexity Search Plugin
 
-A Model Context Protocol (MCP) plugin that provides AI-powered search capabilities using Perplexity's Sonar models with real-time web search.
+A hyper-mcp plugin that provides AI-powered search capabilities using Perplexity's Sonar models with real-time web search.
+
+## Overview
+
+This plugin allows you to perform AI-powered searches using Perplexity's advanced language models. It provides real-time web search with automatic source attribution, citations, and comprehensive answers to complex questions.
 
 ## Features
 
@@ -9,39 +13,76 @@ A Model Context Protocol (MCP) plugin that provides AI-powered search capabiliti
 - Multiple model options (sonar-pro, sonar-reasoning, sonar-deep-research)
 - Citations and source transparency
 - Configurable search parameters and response formatting
-- Usage tracking and cost information
 
 ## Prerequisites
 
-- A Perplexity API key from [Perplexity API Portal](https://www.perplexity.ai/settings/api)
+Before using this plugin, you need to:
 
-## Installation
-
-1. Ensure you have Rust installed (2024 edition recommended)
-2. Clone the hyper-mcp repository
-3. Navigate to the perplexity-search plugin directory:
-   ```bash
-   cd examples/plugins/perplexity-search
-   ```
-4. Build the plugin:
-   ```bash
-   cargo build --release
-   ```
+1. **Create a Perplexity Account**: Go to [Perplexity AI](https://www.perplexity.ai/)
+2. **Get API Access**: Visit the [Perplexity API Portal](https://www.perplexity.ai/settings/api)
+3. **Generate API Key**: Create and copy your API key
+4. **Choose a Plan**: Perplexity offers various pricing tiers with different usage limits
 
 ## Configuration
 
-The plugin requires a Perplexity API key. You can obtain one from the [Perplexity API Portal](https://www.perplexity.ai/settings/api).
+The plugin requires the following configuration:
+
+- `PERPLEXITY_API_KEY`: (Required) Your Perplexity API key
 
 ## Usage
 
-### Tool: `perplexity_search`
+```json
+{
+  "plugins": [
+    {
+      "name": "perplexity-search",
+      "path": "oci://ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest",
+      "runtime_config": {
+        "allowed_hosts": ["api.perplexity.ai"],
+        "env_vars": {
+          "PERPLEXITY_API_KEY": "your-perplexity-api-key-here"
+        }
+      }
+    }
+  ]
+}
+```
 
-Performs an AI-powered search using Perplexity's models with real-time web search capabilities.
+## Available Operations
 
-#### Parameters
+### Basic Search
 
-- `query` (required): The search query or question
-- `api_key` (required): Your Perplexity API key
+```json
+{
+  "name": "perplexity_search",
+  "arguments": {
+    "query": "What are the latest developments in quantum computing?"
+  }
+}
+```
+
+### Advanced Search with Options
+
+```json
+{
+  "name": "perplexity_search",
+  "arguments": {
+    "query": "Explain machine learning algorithms for beginners",
+    "model": "sonar-reasoning",
+    "max_tokens": 2000,
+    "temperature": 0.3,
+    "search_recency_filter": "week"
+  }
+}
+```
+
+## Parameters
+
+### Required Parameters
+
+- `query` (string): The search query or question
+
+### Optional Parameters
 - `model` (optional): The model to use ("sonar-pro", "sonar-reasoning", "sonar-deep-research", default: "sonar-pro")
 - `system_message` (optional): System message to set context for the AI
 - `max_tokens` (optional): Maximum tokens in response (1-4096, default: 1000)

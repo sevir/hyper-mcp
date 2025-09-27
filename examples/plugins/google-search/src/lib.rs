@@ -8,6 +8,16 @@ use serde_json::{Value as JsonValue, json};
 use urlencoding::encode;
 
 const GOOGLE_SEARCH_API_BASE_URL: &str = "https://www.googleapis.com/customsearch/v1";
+fn get_google_config() -> Result<(String, String), Error> {
+    let api_key = config::get("GOOGLE_API_KEY")?
+        .ok_or_else(|| Error::msg("GOOGLE_API_KEY configuration is required but not set"))?;
+
+    let search_engine_id = config::get("GOOGLE_SEARCH_ENGINE_ID")?.ok_or_else(|| {
+        Error::msg("GOOGLE_SEARCH_ENGINE_ID configuration is required but not set")
+    })?;
+
+    Ok((api_key, search_engine_id))
+}
 
 pub(crate) fn call(input: CallToolRequest) -> Result<CallToolResult, Error> {
     match input.params.name.as_str() {
@@ -27,11 +37,10 @@ pub(crate) fn call(input: CallToolRequest) -> Result<CallToolResult, Error> {
 
 fn google_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
+    let (api_key, search_engine_id) = get_google_config()?;
 
     // Extract required parameters
     let query_val = args.get("query").unwrap_or(&JsonValue::Null);
-    let api_key_val = args.get("api_key").unwrap_or(&JsonValue::Null);
-    let search_engine_id_val = args.get("search_engine_id").unwrap_or(&JsonValue::Null);
 
     // Validate required parameters
     let query = match query_val {
@@ -45,41 +54,6 @@ fn google_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                         "Missing or invalid required parameter: query (must be non-empty string)"
                             .to_string(),
                     ),
-                    mime_type: None,
-                    r#type: ContentType::Text,
-                    data: None,
-                }],
-            });
-        }
-    };
-
-    let api_key = match api_key_val {
-        JsonValue::String(s) if !s.is_empty() => s,
-        _ => {
-            return Ok(CallToolResult {
-                is_error: Some(true),
-                content: vec![Content {
-                    annotations: None,
-                    text: Some(
-                        "Missing or invalid required parameter: api_key (must be non-empty string)"
-                            .to_string(),
-                    ),
-                    mime_type: None,
-                    r#type: ContentType::Text,
-                    data: None,
-                }],
-            });
-        }
-    };
-
-    let search_engine_id = match search_engine_id_val {
-        JsonValue::String(s) if !s.is_empty() => s,
-        _ => {
-            return Ok(CallToolResult {
-                is_error: Some(true),
-                content: vec![Content {
-                    annotations: None,
-                    text: Some("Missing or invalid required parameter: search_engine_id (must be non-empty string)".to_string()),
                     mime_type: None,
                     r#type: ContentType::Text,
                     data: None,
@@ -314,14 +288,6 @@ pub(crate) fn describe() -> Result<ListToolsResult, Error> {
                             "type": "string",
                             "description": "The search query string",
                         },
-                        "api_key": {
-                            "type": "string",
-                            "description": "Your Google Custom Search API key",
-                        },
-                        "search_engine_id": {
-                            "type": "string",
-                            "description": "Your Custom Search Engine ID (cx parameter)",
-                        },
                         "num": {
                             "type": "integer",
                             "description": "Number of search results to return (1-10, default: 10)",
@@ -365,7 +331,7 @@ pub(crate) fn describe() -> Result<ListToolsResult, Error> {
                             "enum": ["image"],
                         },
                     },
-                    "required": ["query", "api_key", "search_engine_id"],
+                    "required": ["query"],
                 })
                 .as_object()
                 .unwrap()

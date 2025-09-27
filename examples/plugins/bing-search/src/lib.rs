@@ -8,6 +8,12 @@ use serde_json::{Value as JsonValue, json};
 use urlencoding::encode;
 
 const BING_SEARCH_API_BASE_URL: &str = "https://api.bing.microsoft.com/v7.0/search";
+fn get_bing_config() -> Result<String, Error> {
+    let api_key = config::get("BING_API_KEY")?
+        .ok_or_else(|| Error::msg("BING_API_KEY configuration is required but not set"))?;
+
+    Ok(api_key)
+}
 
 pub(crate) fn call(input: CallToolRequest) -> Result<CallToolResult, Error> {
     match input.params.name.as_str() {
@@ -27,10 +33,10 @@ pub(crate) fn call(input: CallToolRequest) -> Result<CallToolResult, Error> {
 
 fn bing_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
+    let api_key = get_bing_config()?;
 
     // Extract required parameters
     let query_val = args.get("query").unwrap_or(&JsonValue::Null);
-    let api_key_val = args.get("api_key").unwrap_or(&JsonValue::Null);
 
     // Validate required parameters
     let query = match query_val {
@@ -42,25 +48,6 @@ fn bing_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                     annotations: None,
                     text: Some(
                         "Missing or invalid required parameter: query (must be non-empty string)"
-                            .to_string(),
-                    ),
-                    mime_type: None,
-                    r#type: ContentType::Text,
-                    data: None,
-                }],
-            });
-        }
-    };
-
-    let api_key = match api_key_val {
-        JsonValue::String(s) if !s.is_empty() => s,
-        _ => {
-            return Ok(CallToolResult {
-                is_error: Some(true),
-                content: vec![Content {
-                    annotations: None,
-                    text: Some(
-                        "Missing or invalid required parameter: api_key (must be non-empty string)"
                             .to_string(),
                     ),
                     mime_type: None,
@@ -341,10 +328,6 @@ pub(crate) fn describe() -> Result<ListToolsResult, Error> {
                             "type": "string",
                             "description": "The search query string",
                         },
-                        "api_key": {
-                            "type": "string",
-                            "description": "Your Bing Search API subscription key",
-                        },
                         "count": {
                             "type": "integer",
                             "description": "Number of search results to return (1-50, default: 10)",
@@ -378,7 +361,7 @@ pub(crate) fn describe() -> Result<ListToolsResult, Error> {
                             "description": "Language for user interface strings (e.g., 'en', 'es')",
                         },
                     },
-                    "required": ["query", "api_key"],
+                    "required": ["query"],
                 })
                 .as_object()
                 .unwrap()
