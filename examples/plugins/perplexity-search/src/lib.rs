@@ -39,7 +39,10 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
-                    text: Some("Missing or invalid required parameter: query (must be non-empty string)".to_string()),
+                    text: Some(
+                        "Missing or invalid required parameter: query (must be non-empty string)"
+                            .to_string(),
+                    ),
                     mime_type: None,
                     r#type: ContentType::Text,
                     data: None,
@@ -55,7 +58,10 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
-                    text: Some("Missing or invalid required parameter: api_key (must be non-empty string)".to_string()),
+                    text: Some(
+                        "Missing or invalid required parameter: api_key (must be non-empty string)"
+                            .to_string(),
+                    ),
                     mime_type: None,
                     r#type: ContentType::Text,
                     data: None,
@@ -65,20 +71,21 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
     };
 
     // Build request payload
-    let mut messages = vec![
-        json!({
-            "role": "user",
-            "content": query
-        })
-    ];
+    let mut messages = vec![json!({
+        "role": "user",
+        "content": query
+    })];
 
     // Optional system message
     if let Some(JsonValue::String(system_msg)) = args.get("system_message") {
         if !system_msg.is_empty() {
-            messages.insert(0, json!({
-                "role": "system",
-                "content": system_msg
-            }));
+            messages.insert(
+                0,
+                json!({
+                    "role": "system",
+                    "content": system_msg
+                }),
+            );
         }
     }
 
@@ -185,7 +192,11 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                                     results_text_parts.push("Sources:".to_string());
                                     for (index, citation) in citations_array.iter().enumerate() {
                                         if let Some(citation_str) = citation.as_str() {
-                                            results_text_parts.push(format!("{}. {}", index + 1, citation_str));
+                                            results_text_parts.push(format!(
+                                                "{}. {}",
+                                                index + 1,
+                                                citation_str
+                                            ));
                                         }
                                     }
                                     results_text_parts.push("".to_string());
@@ -200,31 +211,36 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                                     results_text_parts.push("Search Results:".to_string());
                                     results_text_parts.push("".to_string());
 
-                                    for (index, result) in results_array.iter().take(5).enumerate() {
+                                    for (index, result) in results_array.iter().take(5).enumerate()
+                                    {
                                         let result_num = index + 1;
                                         results_text_parts.push(format!("{}.", result_num));
 
                                         if let Some(title) = result.get("title") {
                                             if let Some(title_str) = title.as_str() {
-                                                results_text_parts.push(format!("   Title: {}", title_str));
+                                                results_text_parts
+                                                    .push(format!("   Title: {}", title_str));
                                             }
                                         }
 
                                         if let Some(url) = result.get("url") {
                                             if let Some(url_str) = url.as_str() {
-                                                results_text_parts.push(format!("   URL: {}", url_str));
+                                                results_text_parts
+                                                    .push(format!("   URL: {}", url_str));
                                             }
                                         }
 
                                         if let Some(snippet) = result.get("snippet") {
                                             if let Some(snippet_str) = snippet.as_str() {
-                                                results_text_parts.push(format!("   Snippet: {}", snippet_str));
+                                                results_text_parts
+                                                    .push(format!("   Snippet: {}", snippet_str));
                                             }
                                         }
 
                                         if let Some(date) = result.get("date") {
                                             if let Some(date_str) = date.as_str() {
-                                                results_text_parts.push(format!("   Date: {}", date_str));
+                                                results_text_parts
+                                                    .push(format!("   Date: {}", date_str));
                                             }
                                         }
 
@@ -240,13 +256,15 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
 
                             if let Some(prompt_tokens) = usage.get("prompt_tokens") {
                                 if let Some(tokens) = prompt_tokens.as_i64() {
-                                    results_text_parts.push(format!("   Prompt tokens: {}", tokens));
+                                    results_text_parts
+                                        .push(format!("   Prompt tokens: {}", tokens));
                                 }
                             }
 
                             if let Some(completion_tokens) = usage.get("completion_tokens") {
                                 if let Some(tokens) = completion_tokens.as_i64() {
-                                    results_text_parts.push(format!("   Completion tokens: {}", tokens));
+                                    results_text_parts
+                                        .push(format!("   Completion tokens: {}", tokens));
                                 }
                             }
 
@@ -259,7 +277,8 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                             if let Some(cost) = usage.get("cost") {
                                 if let Some(total_cost) = cost.get("total_cost") {
                                     if let Some(cost_val) = total_cost.as_f64() {
-                                        results_text_parts.push(format!("   Total cost: ${:.4}", cost_val));
+                                        results_text_parts
+                                            .push(format!("   Total cost: ${:.4}", cost_val));
                                     }
                                 }
                             }
@@ -269,7 +288,8 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
 
                         // Handle case where no results found
                         if results_text_parts.is_empty() {
-                            results_text_parts.push("No response generated for the query.".to_string());
+                            results_text_parts
+                                .push("No response generated for the query.".to_string());
                         }
 
                         let final_text = results_text_parts.join("\n");
@@ -285,25 +305,30 @@ fn perplexity_search(input: CallToolRequest) -> Result<CallToolResult, Error> {
                             }],
                         })
                     }
-                    Err(e) => {
-                        Ok(CallToolResult {
-                            is_error: Some(true),
-                            content: vec![Content {
-                                annotations: None,
-                                text: Some(format!("Failed to parse API response JSON: {}. Body: {}", e, body_str)),
-                                mime_type: None,
-                                r#type: ContentType::Text,
-                                data: None,
-                            }],
-                        })
-                    }
+                    Err(e) => Ok(CallToolResult {
+                        is_error: Some(true),
+                        content: vec![Content {
+                            annotations: None,
+                            text: Some(format!(
+                                "Failed to parse API response JSON: {}. Body: {}",
+                                e, body_str
+                            )),
+                            mime_type: None,
+                            r#type: ContentType::Text,
+                            data: None,
+                        }],
+                    }),
                 }
             } else {
                 Ok(CallToolResult {
                     is_error: Some(true),
                     content: vec![Content {
                         annotations: None,
-                        text: Some(format!("API request failed with status {}: {}", res.status_code(), body_str)),
+                        text: Some(format!(
+                            "API request failed with status {}: {}",
+                            res.status_code(),
+                            body_str
+                        )),
                         mime_type: None,
                         r#type: ContentType::Text,
                         data: None,
