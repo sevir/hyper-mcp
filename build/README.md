@@ -28,16 +28,15 @@ Builds release binary for Windows:
 - `target/x86_64-pc-windows-gnu/release/hyper-mcp.exe`
 
 ### 🐧 Linux Build (`build-linux.sh`)
-Builds release binaries for Linux:
-- **arm64** (aarch64: Raspberry Pi, ARM servers, etc.)
+Builds release binary for Linux:
 - **amd64** (x86_64: standard 64-bit Intel/AMD)
 
-**Output directories:**
-- `target/release-linux/arm64/hyper-mcp`
+> **Note**: ARM64 build is currently disabled.
+
+**Output directory:**
 - `target/release-linux/amd64/hyper-mcp`
 
-**Original target directories:**
-- `target/aarch64-unknown-linux-gnu/release/hyper-mcp`
+**Original target directory:**
 - `target/x86_64-unknown-linux-gnu/release/hyper-mcp`
 
 ### 🚀 Build All (`build-all.sh`)
@@ -76,8 +75,9 @@ The scripts will automatically install the required Rust targets using `rustup t
 - `aarch64-apple-darwin` (macOS Apple Silicon)
 - `x86_64-apple-darwin` (macOS Intel)
 - `x86_64-pc-windows-gnu` (Windows)
-- `aarch64-unknown-linux-gnu` (Linux ARM64)
 - `x86_64-unknown-linux-gnu` (Linux AMD64)
+
+> **Note**: `aarch64-unknown-linux-gnu` (Linux ARM64) is currently not installed by default.
 
 ### Cross-Compilation Notes
 
@@ -107,8 +107,6 @@ target/
 │   └── x86_64/
 │       └── hyper-mcp
 ├── release-linux/
-│   ├── arm64/
-│   │   └── hyper-mcp
 │   └── amd64/
 │       └── hyper-mcp
 └── release-windows/
