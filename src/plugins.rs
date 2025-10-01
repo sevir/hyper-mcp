@@ -84,139 +84,6 @@ impl PluginService {
         Ok(service)
     }
 
-    async fn call_tool(&self, request: CallToolRequestParam) -> Result<CallToolResult, McpError> {
-        let (plugin_name, tool_name) = match parse_namespaced_tool_name(request.name) {
-            Ok((plugin_name, tool_name)) => (plugin_name, tool_name),
-            Err(e) => {
-                return Err(McpError::invalid_request(
-                    format!("Failed to parse tool name: {e}"),
-                    None,
-                ));
-            }
-        };
-        let plugin_config = match self.config.plugins.get(&plugin_name) {
-            Some(config) => config,
-            None => {
-                return Err(McpError::method_not_found::<CallToolRequestMethod>());
-            }
-        };
-        if let Some(skip_tools) = &plugin_config
-            .runtime_config
-            .as_ref()
-            .and_then(|rc| rc.skip_tools.clone())
-        {
-            if skip_tools.iter().any(|s| s == &tool_name) {
-                log::info!("Tool {tool_name} in skip_tools");
-                return Err(McpError::method_not_found::<CallToolRequestMethod>());
-            }
-        }
-
-        let call_payload = json!({
-            "params": CallToolRequestParam {
-                name: std::borrow::Cow::Owned(tool_name),
-                arguments: request.arguments,
-            },
-        });
-        let json_string =
-            serde_json::to_string(&call_payload).expect("Failed to serialize request");
-
-        let plugins = self.plugins.read().await;
-
-        if let Some(plugin_arc) = plugins.get(&plugin_name) {
-            let plugin_clone = Arc::clone(plugin_arc);
-
-            return match tokio::task::spawn_blocking(move || {
-                let mut plugin = plugin_clone.lock().unwrap();
-                plugin.call::<&str, String>("call", &json_string)
-            })
-            .await
-            {
-                Ok(Ok(result)) => match serde_json::from_str::<CallToolResult>(&result) {
-                    Ok(parsed) => Ok(parsed),
-                    Err(e) => Err(McpError::internal_error(
-                        format!("Failed to deserialize data: {e}"),
-                        None,
-                    )),
-                },
-                Ok(Err(e)) => Err(McpError::internal_error(
-                    format!("Failed to execute plugin {plugin_name}: {e}"),
-                    None,
-                )),
-                Err(e) => Err(McpError::internal_error(
-                    format!("Failed to spawn blocking task for plugin {plugin_name}: {e}"),
-                    None,
-                )),
-            };
-        }
-
-        Err(McpError::method_not_found::<CallToolRequestMethod>())
-    }
-
-    async fn list_tools(&self) -> std::result::Result<ListToolsResult, McpError> {
-        let plugins = self.plugins.read().await;
-
-        let mut payload = ListToolsResult::default();
-
-        for (plugin_name, plugin) in plugins.iter() {
-            let plugin_name = plugin_name.clone();
-            let plugin = Arc::clone(plugin);
-            let plugin_cfg = self.config.plugins.get(&plugin_name).ok_or_else(|| {
-                McpError::internal_error(
-                    format!("Plugin configuration not found for {plugin_name}"),
-                    None,
-                )
-            })?;
-            let skip_tools = plugin_cfg
-                .runtime_config
-                .as_ref()
-                .and_then(|rc| rc.skip_tools.clone())
-                .unwrap_or_default();
-
-            match tokio::task::spawn_blocking(move || {
-                let mut plugin = plugin.lock().unwrap();
-                plugin.call::<&str, String>("describe", "")
-            })
-            .await
-            {
-                Ok(Ok(result)) => {
-                    if let Ok(parsed) = serde_json::from_str::<ListToolsResult>(&result) {
-                        for mut tool in parsed.tools {
-                            let tool_name = tool.name.as_ref() as &str;
-                            if skip_tools.iter().any(|s| s == tool_name) {
-                                log::info!(
-                                    "Skipping tool {} as requested in skip_tools",
-                                    tool.name
-                                );
-                                continue;
-                            }
-                            tool.name = std::borrow::Cow::Owned(match create_namespaced_tool_name(
-                                &plugin_name,
-                                tool_name,
-                            ) {
-                                Ok(namespaced) => namespaced,
-                                Err(_) => {
-                                    log::error!(
-                                        "Tool name {tool_name} in plugin {plugin_name} contains '::', which is not allowed. Skipping this tool to avoid ambiguity.",
-                                    );
-                                    continue;
-                                }
-                            });
-                            payload.tools.push(tool);
-                        }
-                    }
-                }
-                Ok(Err(e)) => {
-                    log::error!("{plugin_name} describe() error: {e}");
-                }
-                Err(e) => {
-                    log::error!("{plugin_name} spawn_blocking error: {e}");
-                }
-            }
-        }
-
-        Ok(payload)
-    }
-
     async fn load_plugins(&self, cli: &Cli) -> Result<()> {
         let reqwest_client: OnceCell<reqwest::Client> = OnceCell::new();
         let oci_client: OnceCell<oci_client::Client> = OnceCell::new();
@@ -276,10 +143,10 @@ impl PluginService {
                     )
                     .await
                     {
-                        log::error!("Error pulling oci plugin: {e}");
-                        return Err(anyhow::anyhow!("Failed to pull OCI plugin: {}", e));
+                        tracing::error!("Error pulling oci plugin: {e}");
+                        return Err(anyhow::anyhow!("Failed to pull OCI plugin: {e}"));
                     }
-                    log::info!("cache plugin `{plugin_name}` to : {local_output_path}");
+                    tracing::info!("cache plugin `{plugin_name}` to : {local_output_path}");
                     tokio::fs::read(local_output_path).await?
                 }
                 "s3" => {
@@ -301,31 +168,29 @@ impl PluginService {
                         Ok(response) => match response.body.collect().await {
                             Ok(body) => body.to_vec(),
                             Err(e) => {
-                                log::error!("Failed to collect S3 object body: {e}");
+                                tracing::error!("Failed to collect S3 object body: {e}");
                                 return Err(anyhow::anyhow!(
-                                    "Failed to collect S3 object body: {}",
-                                    e
+                                    "Failed to collect S3 object body: {e}"
                                 ));
                             }
                         },
                         Err(e) => {
-                            log::error!("Failed to get object from S3: {e}");
-                            return Err(anyhow::anyhow!("Failed to get object from S3: {}", e));
+                            tracing::error!("Failed to get object from S3: {e}");
+                            return Err(anyhow::anyhow!("Failed to get object from S3: {e}"));
                         }
                     }
                 }
                 unsupported => {
-                    log::error!("Unsupported plugin URL scheme: {unsupported}");
+                    tracing::error!("Unsupported plugin URL scheme: {unsupported}");
                     return Err(anyhow::anyhow!(
-                        "Unsupported plugin URL scheme: {}",
-                        unsupported
+                        "Unsupported plugin URL scheme: {unsupported}"
                     ));
                 }
             };
 
             let mut manifest = Manifest::new([Wasm::data(wasm_content)]);
             if let Some(runtime_cfg) = &plugin_cfg.runtime_config {
-                log::info!("runtime_cfg: {runtime_cfg:?}");
+                tracing::info!("runtime_cfg: {runtime_cfg:?}");
                 if let Some(hosts) = &runtime_cfg.allowed_hosts {
                     for host in hosts {
                         manifest = manifest.with_allowed_host(host);
@@ -353,7 +218,7 @@ impl PluginService {
                             manifest = manifest.with_memory_max(num_pages as u32);
                         }
                         Err(e) => {
-                            log::error!(
+                            tracing::error!(
                                 "Failed to parse memory_limit '{memory_limit}': {e}. Using default memory limit."
                             );
                         }
@@ -366,7 +231,7 @@ impl PluginService {
                 .write()
                 .await
                 .insert(plugin_name.clone(), plugin);
-            log::info!("Loaded plugin {plugin_name}");
+            tracing::info!("Loaded plugin {plugin_name}");
         }
         Ok(())
     }
@@ -377,8 +242,11 @@ impl ServerHandler for PluginService {
         ServerInfo {
             protocol_version: ProtocolVersion::V_2024_11_05,
             server_info: Implementation {
+                icons: None,
                 name: "hyper-mcp".to_string(),
+                title: Some("Hyper MCP".to_string()),
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                website_url: Some("https://github.com/tuananh/hyper-mcp".to_string()),
             },
             capabilities: ServerCapabilities::builder().enable_tools().build(),
 
@@ -389,19 +257,232 @@ impl ServerHandler for PluginService {
     async fn call_tool(
         &self,
         request: CallToolRequestParam,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         tracing::info!("got tools/call request {:?}", request);
-        self.call_tool(request).await
+        let (plugin_name, tool_name) = match parse_namespaced_tool_name(request.name) {
+            Ok((plugin_name, tool_name)) => (plugin_name, tool_name),
+            Err(e) => {
+                return Err(McpError::invalid_request(
+                    format!("Failed to parse tool name: {e}"),
+                    None,
+                ));
+            }
+        };
+        let plugin_config = match self.config.plugins.get(&plugin_name) {
+            Some(config) => config,
+            None => {
+                return Err(McpError::method_not_found::<CallToolRequestMethod>());
+            }
+        };
+        if let Some(skip_tools) = &plugin_config
+            .runtime_config
+            .as_ref()
+            .and_then(|rc| rc.skip_tools.clone())
+            && skip_tools.is_match(&tool_name)
+        {
+            tracing::warn!("Tool {tool_name} in skip_tools");
+            return Err(McpError::method_not_found::<CallToolRequestMethod>());
+        }
+
+        let call_payload = json!({
+            "params": CallToolRequestParam {
+                name: std::borrow::Cow::Owned(tool_name),
+                arguments: request.arguments,
+            },
+        });
+        let json_string =
+            serde_json::to_string(&call_payload).expect("Failed to serialize request");
+
+        let plugins = self.plugins.read().await;
+
+        if let Some(plugin_arc) = plugins.get(&plugin_name) {
+            let plugin = Arc::clone(plugin_arc);
+
+            let cancel_handle = {
+                let guard = plugin.lock().unwrap();
+                guard.cancel_handle()
+            };
+
+            let mut join = tokio::task::spawn_blocking(move || {
+                let mut plugin = plugin.lock().unwrap();
+                plugin.call::<&str, String>("call", &json_string)
+            });
+
+            tokio::select! {
+                // Finished normally
+                res = &mut join => {
+                    return match res {
+                        Ok(Ok(result)) => match serde_json::from_str::<CallToolResult>(&result) {
+                            Ok(parsed) => Ok(parsed),
+                            Err(e) => Err(McpError::internal_error(
+                                format!("Failed to deserialize data: {e}"),
+                                None,
+                            )),
+                        },
+                        Ok(Err(e)) => Err(McpError::internal_error(
+                            format!("Failed to execute plugin {plugin_name}: {e}"),
+                            None,
+                        )),
+                        Err(e) => Err(McpError::internal_error(
+                            format!("Failed to spawn blocking task for plugin {plugin_name}: {e}"),
+                            None,
+                        )),
+                    };
+                }
+
+                //Cancellation requested
+                _ = context.ct.cancelled() => {
+                    if let Err(e) = cancel_handle.cancel() {
+                        tracing::error!("Failed to cancel plugin {plugin_name}: {e}");
+                        return Err(McpError::internal_error(
+                            format!("Failed to cancel plugin {plugin_name}: {e}"),
+                            None,
+                        ));
+                    }
+
+                    return match tokio::time::timeout(std::time::Duration::from_millis(250), join).await {
+                        Ok(Ok(Ok(_))) => Err(McpError::internal_error(
+                            format!("Plugin {plugin_name} was cancelled"),
+                            None,
+                        )),
+                        Ok(Ok(Err(e))) => Err(McpError::internal_error(
+                            format!("Failed to execute plugin {plugin_name}: {e}"),
+                            None,
+                        )),
+                        Ok(Err(e)) => Err(McpError::internal_error(
+                            format!("Join error for plugin {plugin_name}: {e}"),
+                            None,
+                        )),
+                        Err(_) => Err(McpError::internal_error(
+                            format!("Timeout waiting for plugin {plugin_name} to cancel"),
+                            None,
+                        )),
+                    };
+                }
+            }
+        }
+
+        Err(McpError::method_not_found::<CallToolRequestMethod>())
     }
 
     async fn list_tools(
         &self,
         request: Option<PaginatedRequestParam>,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> std::result::Result<ListToolsResult, McpError> {
         tracing::info!("got tools/list request {:?}", request);
-        self.list_tools().await
+        let plugins = self.plugins.read().await;
+
+        let mut payload = ListToolsResult::default();
+
+        for (plugin_name, plugin) in plugins.iter() {
+            let plugin_name = plugin_name.clone();
+            let plugin = Arc::clone(plugin);
+
+            let cancel_handle = {
+                let guard = plugin.lock().unwrap();
+                guard.cancel_handle()
+            };
+
+            let plugin_cfg = self.config.plugins.get(&plugin_name).ok_or_else(|| {
+                McpError::internal_error(
+                    format!("Plugin configuration not found for {plugin_name}"),
+                    None,
+                )
+            })?;
+            let skip_tools = plugin_cfg
+                .runtime_config
+                .as_ref()
+                .and_then(|rc| rc.skip_tools.clone())
+                .unwrap_or_default();
+
+            let mut join = tokio::task::spawn_blocking(move || {
+                let mut plugin = plugin.lock().unwrap();
+                plugin.call::<&str, String>("describe", "")
+            });
+
+            tokio::select! {
+                // Finished normally
+                res = &mut join => {
+                    match res {
+                        Ok(Ok(result)) => {
+                            if let Ok(parsed) = serde_json::from_str::<ListToolsResult>(&result) {
+                                for mut tool in parsed.tools {
+                                    let tool_name = tool.name.as_ref() as &str;
+                                    if skip_tools.is_match(tool_name) {
+                                        tracing::info!(
+                                            "Skipping tool {} as requested in skip_tools",
+                                            tool.name
+                                        );
+                                        continue;
+                                    }
+                                    tool.name = std::borrow::Cow::Owned(match create_namespaced_tool_name(
+                                        &plugin_name,
+                                        tool_name,
+                                    ) {
+                                        Ok(namespaced) => namespaced,
+                                        Err(_) => {
+                                            tracing::error!(
+                                                "Tool name {tool_name} in plugin {plugin_name} contains '::', which is not allowed. Skipping this tool to avoid ambiguity.",
+                                            );
+                                            continue;
+                                        }
+                                    });
+                                    payload.tools.push(tool);
+                                }
+                            }
+                        }
+                        Ok(Err(e)) => {
+                            tracing::error!("{plugin_name} describe() error: {e}");
+                            return Err(McpError::internal_error(
+                                format!("Failed to describe plugin {plugin_name}: {e}"),
+                                None,
+                            ));
+                        }
+                        Err(e) => {
+                            tracing::error!("{plugin_name} spawn_blocking error: {e}");
+                            return Err(McpError::internal_error(
+                                format!("Failed to spawn blocking task for plugin {plugin_name}: {e}"),
+                                None,
+                            ));
+                        }
+                    };
+                }
+
+                //Cancellation requested
+                _ = context.ct.cancelled() => {
+                    if let Err(e) = cancel_handle.cancel() {
+                        tracing::error!("Failed to cancel plugin {plugin_name}: {e}");
+                        return Err(McpError::internal_error(
+                            format!("Failed to cancel plugin {plugin_name}: {e}"),
+                            None,
+                        ));
+                    }
+
+                    return match tokio::time::timeout(std::time::Duration::from_millis(250), join).await {
+                        Ok(Ok(Ok(_))) => Err(McpError::internal_error(
+                            format!("Plugin {plugin_name} was cancelled"),
+                            None,
+                        )),
+                        Ok(Ok(Err(e))) => Err(McpError::internal_error(
+                            format!("Failed to describe plugin {plugin_name}: {e}"),
+                            None,
+                        )),
+                        Ok(Err(e)) => Err(McpError::internal_error(
+                            format!("Join error for plugin {plugin_name}: {e}"),
+                            None,
+                        )),
+                        Err(_) => Err(McpError::internal_error(
+                            format!("Timeout waiting for plugin {plugin_name} to cancel"),
+                            None,
+                        )),
+                    };
+                }
+            }
+        }
+
+        Ok(payload)
     }
 
     fn initialize(
@@ -459,11 +540,70 @@ impl ServerHandler for PluginService {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use rmcp::{ServerHandler, model::ProtocolVersion};
-    use std::collections::HashMap;
+    use futures::channel::mpsc;
+    use rmcp::{
+        service::{RunningService, serve_directly},
+        transport::sink_stream::SinkStreamTransport,
+    };
     use std::path::PathBuf;
     use tempfile::TempDir;
-    use tokio::sync::RwLock;
+    use tokio_test::assert_ok;
+    use tokio_util::sync::CancellationToken;
+
+    async fn create_temp_config_file(content: &str) -> anyhow::Result<(TempDir, PathBuf)> {
+        let temp_dir = TempDir::new()?;
+        let config_path = temp_dir.path().join("test_config.yaml");
+        tokio::fs::write(&config_path, content).await?;
+        Ok((temp_dir, config_path))
+    }
+
+    fn create_test_cli() -> Cli {
+        crate::Cli {
+            config_file: None,
+            log_level: Some("info".to_string()),
+            transport: "stdio".to_string(),
+            bind_address: "127.0.0.1:3001".to_string(),
+            insecure_skip_signature: false,
+            use_sigstore_tuf_data: true,
+            rekor_pub_keys: None,
+            fulcio_certs: None,
+            cert_issuer: None,
+            cert_email: None,
+            cert_url: None,
+        }
+    }
+
+    fn create_test_ctx(
+        running: &RunningService<RoleServer, PluginService>,
+    ) -> RequestContext<RoleServer> {
+        RequestContext {
+            ct: CancellationToken::new(),
+            extensions: Extensions::default(),
+            id: RequestId::Number(1),
+            meta: Meta::default(),
+            peer: running.peer().clone(),
+        }
+    }
+
+    fn create_test_service(service: PluginService) -> RunningService<RoleServer, PluginService> {
+        let (_, to_server_rx) = mpsc::channel(8);
+        let (to_client_tx, _) = mpsc::channel(8);
+        let transport = SinkStreamTransport::new(to_client_tx, to_server_rx);
+        serve_directly(service, transport, None)
+    }
+
+    fn get_test_wasm_path() -> PathBuf {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("examples");
+        path.push("plugins");
+        path.push("time");
+        path.push("time.wasm");
+        path
+    }
+
+    fn test_wasm_exists() -> bool {
+        get_test_wasm_path().exists()
+    }
 
     #[test]
     fn test_create_tool_name() {
@@ -574,14 +714,14 @@ mod tests {
     #[test]
     fn test_tool_name_parse_error_display() {
         let error = ToolNameParseError;
-        assert_eq!(format!("{}", error), "Failed to parse tool name");
+        assert_eq!(format!("{error}"), "Failed to parse tool name");
     }
 
     #[test]
     fn test_tool_name_parse_error_from_plugin_name_error() {
         let plugin_error = PluginNameParseError;
         let tool_error: ToolNameParseError = plugin_error.into();
-        assert_eq!(format!("{}", tool_error), "Failed to parse tool name");
+        assert_eq!(format!("{tool_error}"), "Failed to parse tool name");
     }
 
     #[test]
@@ -629,7 +769,7 @@ mod tests {
 
         // Test that the error implements standard error traits
         assert!(std::error::Error::source(&tool_error).is_none());
-        assert!(!format!("{}", tool_error).is_empty());
+        assert!(!format!("{tool_error}").is_empty());
     }
 
     #[test]
@@ -681,20 +821,18 @@ mod tests {
             let result = create_namespaced_tool_name(&plugin, tool_name);
 
             if should_succeed {
-                assert!(result.is_ok(), "{}: {}", description, tool_name);
+                assert!(result.is_ok(), "{description}: {tool_name}");
 
                 if let Ok(namespaced) = result {
                     let parse_result =
                         parse_namespaced_tool_name(std::borrow::Cow::Owned(namespaced));
                     assert!(
                         parse_result.is_ok(),
-                        "Should parse back {}: {}",
-                        description,
-                        tool_name
+                        "Should parse back {description}: {tool_name}"
                     );
                 }
             } else {
-                assert!(result.is_err(), "{}: {}", description, tool_name);
+                assert!(result.is_err(), "{description}: {tool_name}");
             }
         }
     }
@@ -732,44 +870,6 @@ mod tests {
         assert_eq!(parsed_tool, "test_tool");
     }
 
-    // Helper functions for PluginService tests
-
-    fn create_test_cli() -> crate::Cli {
-        crate::Cli {
-            config_file: None,
-            log_level: Some("info".to_string()),
-            transport: "stdio".to_string(),
-            bind_address: "127.0.0.1:3001".to_string(),
-            insecure_skip_signature: false,
-            use_sigstore_tuf_data: true,
-            rekor_pub_keys: None,
-            fulcio_certs: None,
-            cert_issuer: None,
-            cert_email: None,
-            cert_url: None,
-        }
-    }
-
-    async fn create_temp_config_file(content: &str) -> anyhow::Result<(TempDir, PathBuf)> {
-        let temp_dir = TempDir::new()?;
-        let config_path = temp_dir.path().join("test_config.yaml");
-        tokio::fs::write(&config_path, content).await?;
-        Ok((temp_dir, config_path))
-    }
-
-    fn get_test_wasm_path() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("examples");
-        path.push("plugins");
-        path.push("time");
-        path.push("time.wasm");
-        path
-    }
-
-    fn test_wasm_exists() -> bool {
-        get_test_wasm_path().exists()
-    }
-
     // Helper function to create a dummy request context for compilation
     // These tests will be skipped at runtime since we can't easily mock contexts
     // PluginService creation tests
@@ -798,7 +898,7 @@ plugins: {}
     async fn test_plugin_service_creation_with_file_plugin() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -851,7 +951,7 @@ plugins:
     async fn test_plugin_service_creation_with_invalid_memory_limit() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -902,7 +1002,7 @@ plugins:
     async fn test_plugin_service_list_tools_with_plugin() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -920,15 +1020,18 @@ plugins:
         cli.config_file = Some(config_path);
 
         let service = PluginService::new(&cli).await.unwrap();
+        let running = create_test_service(service);
 
         // Verify the service was created successfully
         assert!(
-            service.plugins.read().await.len() > 0,
+            !running.service().plugins.read().await.is_empty(),
             "Should have loaded plugin"
         );
 
         // Test the list_tools function
-        let result = service.list_tools().await;
+        let request = None; // No pagination for this test
+        let ctx = create_test_ctx(&running);
+        let result = running.service().list_tools(request, ctx).await;
         assert!(result.is_ok(), "list_tools should succeed");
 
         let list_tools_result = result.unwrap();
@@ -949,9 +1052,7 @@ plugins:
         for expected_tool in &expected_tools {
             assert!(
                 actual_tool_names.contains(&expected_tool.to_string()),
-                "Expected tool '{}' not found in actual tools: {:?}",
-                expected_tool,
-                actual_tool_names
+                "Expected tool '{expected_tool}' not found in actual tools: {actual_tool_names:?}"
             );
         }
 
@@ -980,9 +1081,7 @@ plugins:
         for operation in &expected_operations {
             assert!(
                 description.contains(operation),
-                "Tool description should mention operation '{}': {}",
-                operation,
-                description
+                "Tool description should mention operation '{operation}': {description}"
             );
         }
 
@@ -1000,12 +1099,13 @@ plugins:
                         for operation in &expected_operations {
                             assert!(
                                 schema_operations.contains(&operation.to_string()),
-                                "Input schema should include operation '{}' in enum: {:?}",
-                                operation,
-                                schema_operations
+                                "Input schema should include operation '{operation}' in enum: {schema_operations:?}"
                             );
                         }
                     }
+
+                    // Cleanup
+                    assert_ok!(running.cancel().await);
                 }
             }
         }
@@ -1015,7 +1115,7 @@ plugins:
     async fn test_plugin_service_list_tools_with_skip_tools() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -1036,15 +1136,18 @@ plugins:
         cli.config_file = Some(config_path);
 
         let service = PluginService::new(&cli).await.unwrap();
+        let running = create_test_service(service);
 
         // Verify the service was created successfully
         assert!(
-            service.plugins.read().await.len() > 0,
+            !running.service().plugins.read().await.is_empty(),
             "Should have loaded plugin"
         );
 
         // Test the list_tools function with skip_tools configuration
-        let result = service.list_tools().await;
+        let request = None; // No pagination for this test
+        let ctx = create_test_ctx(&running);
+        let result = running.service().list_tools(request, ctx).await;
         assert!(result.is_ok(), "list_tools should succeed");
 
         let list_tools_result = result.unwrap();
@@ -1069,20 +1172,22 @@ plugins:
 
         assert!(
             !tool_names.contains(&"time_plugin-time".to_string()),
-            "time_plugin-time should be skipped but was found in tools: {:?}",
-            tool_names
+            "time_plugin-time should be skipped but was found in tools: {tool_names:?}"
         );
 
         // Verify that the plugin itself was loaded (skip_tools should not prevent plugin loading)
-        let plugins = service.plugins.read().await;
-        let plugin_name: PluginName = "time_plugin".parse().unwrap();
-        assert!(
-            plugins.contains_key(&plugin_name),
-            "Plugin 'time_plugin' should still be loaded even with skip_tools configuration"
-        );
+        {
+            let plugins = running.service().plugins.read().await;
+            let plugin_name: PluginName = "time_plugin".parse().unwrap();
+            assert!(
+                plugins.contains_key(&plugin_name),
+                "Plugin 'time_plugin' should still be loaded even with skip_tools configuration"
+            );
+        } // plugins guard dropped here
 
         // Verify the plugin configuration includes skip_tools
-        let plugin_config = service.config.plugins.get(&plugin_name).unwrap();
+        let plugin_name: PluginName = "time_plugin".parse().unwrap();
+        let plugin_config = running.service().config.plugins.get(&plugin_name).unwrap();
         let skip_tools = plugin_config
             .runtime_config
             .as_ref()
@@ -1090,17 +1195,18 @@ plugins:
             .unwrap();
 
         assert!(
-            skip_tools.contains(&"time".to_string()),
-            "Configuration should include 'time' in skip_tools list: {:?}",
-            skip_tools
+            skip_tools.is_match(&"time"),
+            "Configuration should include 'time' in skip_tools list: {skip_tools:?}"
         );
 
         assert_eq!(
             skip_tools.len(),
             1,
-            "Should have exactly one tool in skip_tools list: {:?}",
-            skip_tools
+            "Should have exactly one tool in skip_tools list: {skip_tools:?}"
         );
+
+        // Cleanup
+        assert_ok!(running.cancel().await);
     }
 
     #[tokio::test]
@@ -1113,6 +1219,7 @@ plugins:
             config,
             plugins: Arc::new(RwLock::new(HashMap::new())),
         };
+        let running = create_test_service(service);
 
         // Test calling tool with invalid format (missing plugin name separator)
         let request = CallToolRequestParam {
@@ -1120,15 +1227,15 @@ plugins:
             arguments: None,
         };
 
-        let result = service.call_tool(request).await;
+        let ctx = create_test_ctx(&running);
+        let result = running.service().call_tool(request, ctx).await;
         assert!(result.is_err(), "Should fail with invalid tool name format");
 
         if let Err(error) = result {
             // Should be an invalid_request error
             assert!(
                 error.to_string().contains("Failed to parse tool name"),
-                "Error should mention parsing failure: {}",
-                error
+                "Error should mention parsing failure: {error}"
             );
         }
 
@@ -1138,8 +1245,10 @@ plugins:
             arguments: None,
         };
 
-        let result = service.call_tool(request).await;
+        let ctx = create_test_ctx(&running);
+        let result = running.service().call_tool(request, ctx).await;
         assert!(result.is_err(), "Should fail with empty tool name");
+        assert_ok!(running.cancel().await);
     }
 
     #[tokio::test]
@@ -1152,6 +1261,7 @@ plugins:
             config,
             plugins: Arc::new(RwLock::new(HashMap::new())),
         };
+        let running = create_test_service(service);
 
         // Test calling tool on nonexistent plugin
         let request = CallToolRequestParam {
@@ -1159,7 +1269,8 @@ plugins:
             arguments: None,
         };
 
-        let result = service.call_tool(request).await;
+        let ctx = create_test_ctx(&running);
+        let result = running.service().call_tool(request, ctx).await;
         assert!(result.is_err(), "Should fail with nonexistent plugin");
 
         if let Err(error) = result {
@@ -1167,17 +1278,17 @@ plugins:
             let error_str = error.to_string();
             assert!(
                 error_str.contains("-32601") || error_str.contains("tools/call"),
-                "Error should indicate method not found: {}",
-                error
+                "Error should indicate method not found: {error}"
             );
         }
+        assert_ok!(running.cancel().await);
     }
 
     #[tokio::test]
     async fn test_plugin_service_call_tool_with_plugin() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -1195,10 +1306,11 @@ plugins:
         cli.config_file = Some(config_path);
 
         let service = PluginService::new(&cli).await.unwrap();
+        let running = create_test_service(service);
 
         // Verify the service was created successfully
         assert!(
-            service.plugins.read().await.len() > 0,
+            !running.service().plugins.read().await.is_empty(),
             "Should have loaded plugin"
         );
 
@@ -1215,11 +1327,11 @@ plugins:
             }),
         };
 
-        let result = service.call_tool(request).await;
+        let ctx = create_test_ctx(&running);
+        let result = running.service().call_tool(request, ctx).await;
         assert!(
             result.is_ok(),
-            "Should successfully call time tool: {:?}",
-            result
+            "Should successfully call time tool: {result:?}"
         );
 
         let call_result = result.unwrap();
@@ -1246,11 +1358,11 @@ plugins:
             }),
         };
 
-        let result = service.call_tool(request).await;
+        let ctx = create_test_ctx(&running);
+        let result = running.service().call_tool(request, ctx).await;
         assert!(
             result.is_ok(),
-            "Should successfully call parse_time operation: {:?}",
-            result
+            "Should successfully call parse_time operation: {result:?}"
         );
 
         let call_result = result.unwrap();
@@ -1260,13 +1372,14 @@ plugins:
             !call_result.content.is_empty(),
             "Parse time operation should return non-empty content"
         );
+        assert_ok!(running.cancel().await);
     }
 
     #[tokio::test]
     async fn test_plugin_service_call_tool_with_skipped_tool() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -1287,10 +1400,11 @@ plugins:
         cli.config_file = Some(config_path);
 
         let service = PluginService::new(&cli).await.unwrap();
+        let running = create_test_service(service);
 
         // Verify the service was created successfully
         assert!(
-            service.plugins.read().await.len() > 0,
+            !running.service().plugins.read().await.is_empty(),
             "Should have loaded plugin"
         );
 
@@ -1307,7 +1421,8 @@ plugins:
             }),
         };
 
-        let result = service.call_tool(request).await;
+        let ctx = create_test_ctx(&running);
+        let result = running.service().call_tool(request, ctx).await;
         assert!(result.is_err(), "Should fail when calling skipped tool");
 
         if let Err(error) = result {
@@ -1315,10 +1430,10 @@ plugins:
             let error_str = error.to_string();
             assert!(
                 error_str.contains("-32601") || error_str.contains("tools/call"),
-                "Error should indicate method not found for skipped tool: {}",
-                error
+                "Error should indicate method not found for skipped tool: {error}"
             );
         }
+        assert_ok!(running.cancel().await);
     }
 
     #[test]
@@ -1374,7 +1489,7 @@ plugins:
     async fn test_plugin_service_multiple_plugins() {
         let wasm_path = get_test_wasm_path();
         if !test_wasm_exists() {
-            println!("Skipping test - WASM file not found at {:?}", wasm_path);
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
             return;
         }
 
@@ -1404,5 +1519,127 @@ plugins:
         assert_eq!(plugins.len(), 2, "Should have loaded two plugins");
         assert!(plugins.contains_key(&PluginName::from_str("time_plugin_1").unwrap()));
         assert!(plugins.contains_key(&PluginName::from_str("time_plugin_2").unwrap()));
+    }
+
+    #[tokio::test]
+    async fn test_plugin_service_call_tool_with_cancellation() {
+        let wasm_path = get_test_wasm_path();
+        if !test_wasm_exists() {
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
+            return;
+        }
+
+        let config_content = format!(
+            r#"
+plugins:
+  time_plugin:
+    url: "file://{}"
+    runtime_config:
+      max_memory_mb: 10
+      max_execution_time_ms: 5000
+"#,
+            wasm_path.to_string_lossy()
+        );
+
+        let (_temp_dir, config_path) = create_temp_config_file(&config_content).await.unwrap();
+        let mut cli = create_test_cli();
+        cli.config_file = Some(config_path);
+
+        let service = PluginService::new(&cli).await.unwrap();
+        let running = create_test_service(service);
+
+        // Create a cancellation token
+        let cancellation_token = CancellationToken::new();
+
+        // Create request context with the cancellation token
+        let ctx = RequestContext {
+            ct: cancellation_token.clone(),
+            extensions: Extensions::default(),
+            id: RequestId::Number(1),
+            meta: Meta::default(),
+            peer: running.peer().clone(),
+        };
+
+        let request = CallToolRequestParam {
+            name: std::borrow::Cow::Borrowed("time_plugin-time"),
+            arguments: Some({
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "name".to_string(),
+                    serde_json::Value::String("get_time_utc".to_string()),
+                );
+                map
+            }),
+        };
+
+        // Cancel the token before executing call_tool to force cancellation path
+        cancellation_token.cancel();
+
+        // Execute call_tool with the already-cancelled token
+        let result = running.service().call_tool(request, ctx).await;
+
+        assert!(result.is_err(), "Expected cancellation error");
+        let error = result.unwrap_err();
+        let error_message = error.to_string();
+        assert!(
+            error_message.contains("cancelled") || error_message.contains("canceled"),
+            "Expected cancellation error message, got: {error_message}"
+        );
+        assert_ok!(running.cancel().await);
+    }
+
+    #[tokio::test]
+    async fn test_plugin_service_list_tools_with_cancellation() {
+        let wasm_path = get_test_wasm_path();
+        if !test_wasm_exists() {
+            println!("Skipping test - WASM file not found at {wasm_path:?}");
+            return;
+        }
+
+        let config_content = format!(
+            r#"
+plugins:
+  time_plugin:
+    url: "file://{}"
+    runtime_config:
+      max_memory_mb: 10
+      max_execution_time_ms: 5000
+"#,
+            wasm_path.display()
+        );
+
+        let (_temp_dir, config_path) = create_temp_config_file(&config_content).await.unwrap();
+        let mut cli = create_test_cli();
+        cli.config_file = Some(config_path);
+
+        let service = PluginService::new(&cli).await.unwrap();
+        let running = create_test_service(service);
+
+        // Create a cancellation token
+        let cancellation_token = CancellationToken::new();
+
+        // Create request context with the cancellation token
+        let ctx = RequestContext {
+            ct: cancellation_token.clone(),
+            extensions: Extensions::default(),
+            id: RequestId::Number(1),
+            meta: Meta::default(),
+            peer: running.peer().clone(),
+        };
+
+        // Cancel the token before executing list_tools to force cancellation path
+        cancellation_token.cancel();
+
+        // Execute list_tools with the already-cancelled token
+        let result = running.service().list_tools(None, ctx).await;
+
+        assert!(result.is_err(), "Expected cancellation error");
+        let error = result.unwrap_err();
+        let error_message = error.to_string();
+        assert!(
+            error_message.contains("cancelled") || error_message.contains("canceled"),
+            "Expected cancellation error message, got: {error_message}"
+        );
+        assert_ok!(running.cancel().await);
     }
 }

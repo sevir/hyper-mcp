@@ -8,7 +8,7 @@ The configuration is structured as follows:
 - **plugins**: A map of plugin names to  plugin configuration objects.
   - **path** (`string`): OCI path or HTTP URL or local path for the plugin.
   - **runtime_config** (`object`, optional): Plugin-specific runtime configuration. The available fields are:
-    - **skip_tools** (`array[string]`, optional): List of tool names to skip loading at runtime.
+    - **skip_tools** (`array[string]`, optional): List of regex patterns for tool names to skip loading at runtime. Each pattern is automatically anchored to match the entire tool name (equivalent to wrapping with `^` and `$`). Supports full regex syntax for powerful pattern matching.
     - **allowed_hosts** (`array[string]`, optional): List of allowed hosts for the plugin (e.g., `["1.1.1.1"]` or `["*"]`).
     - **allowed_paths** (`array[string]`, optional): List of allowed file system paths.
     - **env_vars** (`object`, optional): Key-value pairs of environment variables for the plugin.
@@ -322,7 +322,10 @@ plugins:
       allowed_hosts:
         - "1.1.1.1"
       skip_tools:
-        - "debug"
+        - "debug_tool"           # Skip exact tool name
+        - "temp_.*"              # Skip tools starting with "temp_"
+        - ".*_backup"            # Skip tools ending with "_backup"
+        - "test_[0-9]+"          # Skip tools like "test_1", "test_42"
       env_vars:
         FOO: "bar"
       memory_limit: "512Mi"
@@ -361,7 +364,12 @@ plugins:
       "url": "oci://ghcr.io/tuananh/myip-plugin:latest",
       "runtime_config": {
         "allowed_hosts": ["1.1.1.1"],
-        "skip_tools": ["debug"],
+        "skip_tools": [
+          "debug_tool",
+          "temp_.*",
+          ".*_backup",
+          "test_[0-9]+"
+        ],
         "env_vars": {"FOO": "bar"},
         "memory_limit": "512Mi"
       }
@@ -470,6 +478,81 @@ This error occurs when the stored password isn't valid JSON or doesn't match the
    chmod 600 config.yaml
    ```
 
+## Skip Tools Pattern Matching
+
+The `skip_tools` field supports powerful regex pattern matching for filtering out unwanted tools at runtime.
+
+> 📖 **For comprehensive examples, advanced patterns, and detailed use cases, see [SKIP_TOOLS_GUIDE.md](./SKIP_TOOLS_GUIDE.md)**
+
+### Pattern Behavior
+- **Automatic Anchoring**: Patterns are automatically anchored to match the entire tool name (wrapped with `^` and `$`)
+- **Regex Support**: Full regex syntax is supported, including wildcards, character classes, and quantifiers
+- **Case Sensitive**: Pattern matching is case-sensitive
+- **Compilation**: All patterns are compiled into a single optimized regex set for efficient matching
+
+### Pattern Examples
+
+#### Exact Matches
+```yaml
+skip_tools:
+  - "debug_tool"      # Matches only "debug_tool"
+  - "test_runner"     # Matches only "test_runner"
+```
+
+#### Wildcard Patterns
+```yaml
+skip_tools:
+  - "temp_.*"         # Matches "temp_file", "temp_data", etc.
+  - ".*_backup"       # Matches "data_backup", "file_backup", etc.
+  - "debug.*"         # Matches "debug", "debugger", "debug_info", etc.
+```
+
+#### Advanced Regex Patterns
+```yaml
+skip_tools:
+  - "tool_[0-9]+"                    # Matches "tool_1", "tool_42", etc.
+  - "test_(unit|integration)"        # Matches "test_unit" and "test_integration"
+  - "[a-z]+_helper"                  # Matches lowercase word + "_helper"
+  - "system_(admin|user)_.*"         # Matches tools starting with "system_admin_" or "system_user_"
+```
+
+#### Explicit Anchoring
+```yaml
+skip_tools:
+  - "^prefix_.*"      # Explicit start anchor (same as "prefix_.*" due to auto-anchoring)
+  - ".*_suffix$"      # Explicit end anchor (same as ".*_suffix" due to auto-anchoring)
+  - "^exact_only$"    # Fully explicit anchoring (same as "exact_only")
+```
+
+#### Special Characters
+```yaml
+skip_tools:
+  - "file\\.exe"      # Matches "file.exe" literally (escaped dot)
+  - "script\\?"       # Matches "script?" literally (escaped question mark)  
+  - "temp\\*data"     # Matches "temp*data" literally (escaped asterisk)
+```
+
+#### Common Use Cases
+```yaml
+skip_tools:
+  - ".*_test"         # Skip all test tools
+  - "dev_.*"          # Skip all development tools
+  - "mock_.*"         # Skip all mock tools  
+  - ".*_deprecated"   # Skip all deprecated tools
+  - "admin_.*"        # Skip all admin tools
+  - "debug.*"         # Skip all debug-related tools
+```
+
+### Error Handling
+- Invalid regex patterns will cause configuration loading to fail with a descriptive error
+- Empty pattern arrays are allowed and will skip no tools
+- The `skip_tools` field can be omitted entirely to skip no tools
+
+### Performance Notes
+- All patterns are compiled into a single optimized `RegexSet` for O(1) tool name checking
+- Pattern compilation happens once at startup, not per tool evaluation
+- Large numbers of patterns have minimal runtime performance impact
+
 ## Notes
 
 - Fields marked as `optional` can be omitted.
@@ -477,3 +560,4 @@ This error occurs when the stored password isn't valid JSON or doesn't match the
 - Authentication applies to all HTTPS requests made by plugins, including plugin downloads and runtime API calls.
 - URL matching is case-sensitive and based on string prefix matching.
 - Keyring authentication requires platform-specific keyring services to be available and accessible.
+- Skip tools patterns use full regex syntax with automatic anchoring for precise tool filtering.

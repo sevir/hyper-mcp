@@ -162,6 +162,12 @@ We maintain several example plugins to get you started:
   - Security considerations and best practices
   - Platform-specific keyring setup for macOS, Linux, and Windows
   - Troubleshooting authentication issues
+- **[Skip Tools Pattern Guide](./SKIP_TOOLS_GUIDE.md)** - Comprehensive guide to filtering tools using regex patterns:
+  - Pattern syntax and examples
+  - Common use cases and best practices
+  - Environment-specific filtering strategies
+  - Advanced regex techniques
+  - Migration and troubleshooting
 
 ## Creating Plugins
 

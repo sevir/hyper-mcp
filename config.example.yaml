@@ -11,8 +11,29 @@ plugins:
     runtime_config:
       allowed_hosts:
         - "1.1.1.1"
+      skip_tools:
+        - "debug_.*" # Skip all debug tools
+        - ".*_test" # Skip all test tools
   fetch:
     url: oci://ghcr.io/tuananh/fetch-plugin:latest
     runtime_config:
       allowed_hosts:
         - "*"
+      skip_tools:
+        - "temp_.*" # Skip temporary tools
+        - "mock_.*" # Skip mock tools
+        - "tool_[0-9]+" # Skip numbered tools like "tool_1", "tool_42"
+
+  # Example plugin with comprehensive skip_tools patterns
+  example_plugin:
+    url: oci://ghcr.io/example/demo-plugin:latest
+    runtime_config:
+      skip_tools:
+        - "admin_tool" # Skip exact tool name
+        - "dev_.*" # Skip development tools
+        - ".*_deprecated" # Skip deprecated tools
+        - "test_(unit|integration)" # Skip specific test types
+        - "[a-z]+_helper" # Skip lowercase helpers
+      allowed_hosts:
+        - "example.com"
+      memory_limit: "256Mi"
