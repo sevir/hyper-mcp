@@ -55,6 +55,32 @@ fn parse_namespaced_tool_name(
     Err(ToolNameParseError)
 }
 
+/// Check if a value contains an environment variable reference in the format ${ENVVARKEY}
+/// and replace it with the actual environment variable value if it exists.
+/// If the environment variable doesn't exist, returns the original value.
+fn check_env_reference(value: &str) -> String {
+    // Check if the value matches the pattern ${ENVVARKEY}
+    if let Some(stripped) = value.strip_prefix("${").and_then(|s| s.strip_suffix("}")) {
+        // Try to get the environment variable
+        match std::env::var(stripped) {
+            Ok(env_value) => {
+                tracing::debug!(
+                    "Resolved environment variable reference ${{{stripped}}} to actual value"
+                );
+                env_value
+            }
+            Err(_) => {
+                tracing::warn!(
+                    "Environment variable {stripped} not found, keeping original value {value}"
+                );
+                value.to_string()
+            }
+        }
+    } else {
+        value.to_string()
+    }
+}
+
 #[derive(Clone)]
 pub struct PluginService {
     config: Config,
@@ -206,7 +232,8 @@ impl PluginService {
                 // Add plugin configurations if present
                 if let Some(env_vars) = &runtime_cfg.env_vars {
                     for (key, value) in env_vars {
-                        manifest = manifest.with_config_key(key, value);
+                        let resolved_value = check_env_reference(value);
+                        manifest = manifest.with_config_key(key, &resolved_value);
                     }
                 }
 
