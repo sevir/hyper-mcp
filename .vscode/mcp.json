@@ -6,7 +6,10 @@
 			"args": [
 				"--config-file",
 				".ai/hyper-mcp.json"
-			]
+			],
+			"env": {
+				"SERPER_API_KEY": "${input:serper-api-key}"
+			}
 		},
 		"mycommandmcp": {
 			"type": "stdio",
@@ -48,5 +51,12 @@
 			]
 		}
 	},
-	"inputs": []
+	"inputs": [
+		{
+			"type": "promptString",
+			"id": "serper-api-key",
+			"description": "Your Serper API key. Get one at https://serper.dev",
+			"password": true
+		}
+	]
 }
