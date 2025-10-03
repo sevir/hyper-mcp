@@ -1,3 +1,63 @@
+#![allow(unused_macros)]
+
+pub(crate) mod internal {
+    pub(crate) fn return_error(e: extism_pdk::Error) -> i32 {
+        let err = format!("{:?}", e);
+        let mem = extism_pdk::Memory::from_bytes(&err).unwrap();
+        unsafe {
+            extism_pdk::extism::error_set(mem.offset());
+        }
+        -1
+    }
+}
+
+#[allow(unused)]
+macro_rules! try_input {
+    () => {{
+        let x = extism_pdk::input();
+        match x {
+            Ok(x) => x,
+            Err(e) => return internal::return_error(e),
+        }
+    }};
+}
+
+#[allow(unused)]
+macro_rules! try_input_json {
+    () => {{
+        let x = extism_pdk::input();
+        match x {
+            Ok(extism_pdk::Json(x)) => x,
+            Err(e) => return internal::return_error(e),
+        }
+    }};
+}
+
+mod exports {
+    use super::*;
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn call() -> i32 {
+        let ret =
+            crate::call(try_input_json!()).and_then(|x| extism_pdk::output(extism_pdk::Json(x)));
+
+        match ret {
+            Ok(()) => 0,
+            Err(e) => internal::return_error(e),
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn describe() -> i32 {
+        let ret = crate::describe().and_then(|x| extism_pdk::output(extism_pdk::Json(x)));
+
+        match ret {
+            Ok(()) => 0,
+            Err(e) => internal::return_error(e),
+        }
+    }
+}
+
 pub mod types {
     use serde::{Deserialize, Serialize};
     use serde_json::Value as JsonValue;

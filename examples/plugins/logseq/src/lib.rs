@@ -48,8 +48,7 @@ fn make_logseq_query(method: &str, args: Vec<JsonValue>) -> Result<JsonValue, Er
         .map_err(|e| Error::msg(format!("Failed to parse JSON response: {}", e)))
 }
 
-#[plugin_fn]
-pub fn list_tools() -> FnResult<Json<ListToolsResult>> {
+pub(crate) fn describe() -> Result<ListToolsResult, Error> {
     let mut tools = Vec::new();
 
     // Search pages tool
@@ -182,7 +181,7 @@ pub fn list_tools() -> FnResult<Json<ListToolsResult>> {
         },
     });
 
-    Ok(Json(ListToolsResult { tools }))
+    Ok(ListToolsResult { tools })
 }
 
 fn format_block_hierarchy(block: &JsonValue, level: usize) -> String {
@@ -374,8 +373,7 @@ fn get_page_content(page_name: &str) -> Result<String, Error> {
     Ok(output)
 }
 
-#[plugin_fn]
-pub fn call_tool(Json(request): Json<CallToolRequest>) -> FnResult<Json<CallToolResult>> {
+pub(crate) fn call(request: CallToolRequest) -> Result<CallToolResult, Error> {
     let tool_name = &request.params.name;
     let args = request.params.arguments.as_ref();
 
@@ -431,7 +429,7 @@ pub fn call_tool(Json(request): Json<CallToolRequest>) -> FnResult<Json<CallTool
             get_page_content(page_name)?
         }
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -440,11 +438,11 @@ pub fn call_tool(Json(request): Json<CallToolRequest>) -> FnResult<Json<CallTool
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
-    Ok(Json(CallToolResult {
+    Ok(CallToolResult {
         is_error: None,
         content: vec![Content {
             annotations: None,
@@ -453,5 +451,5 @@ pub fn call_tool(Json(request): Json<CallToolRequest>) -> FnResult<Json<CallTool
             r#type: ContentType::Text,
             data: None,
         }],
-    }))
+    })
 }

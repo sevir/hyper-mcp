@@ -61,6 +61,34 @@
         },
         "allowed_hosts": ["api.search.brave.com"]
       }
+    },
+    "logseq": {
+      "url": "oci://ghcr.io/sevir/hyper-mcp/plugin-logseq:latest",
+      "runtime_config": {
+        "env_vars": {
+          "LOGSEQ_API_KEY": "idi"
+        },
+        "allowed_hosts": ["localhost:12315"]
+      }
+    },
+    "youtrack": {
+      "url": "oci://ghcr.io/sevir/hyper-mcp/plugin-youtrack:latest",
+      "runtime_config": {
+        "env_vars": {
+          "YOUTRACK_BASE_URL": "${YOUTRACK_BASE_URL}",
+          "YOUTRACK_API_TOKEN": "${YOUTRACK_API_TOKEN}"
+        },
+        "allowed_hosts": ["${YOUTRACK_BASE_URL}"]
+      }
+    },
+    "gdrive": {
+      "url": "oci://ghcr.io/sevir/hyper-mcp/plugin-gdrive:latest",
+      "runtime_config": {
+        "env_vars": {
+          "GOOGLE_ACCESS_TOKEN": "${GOOGLE_ACCESS_TOKEN}"
+        },
+        "allowed_hosts": ["www.googleapis.com", "docs.googleapis.com"]
+      }
     }
   }
 }

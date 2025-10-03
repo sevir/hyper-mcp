@@ -17,8 +17,7 @@ fn get_youtrack_config() -> Result<(String, String), Error> {
     Ok((base_url, api_token))
 }
 
-#[plugin_fn]
-pub fn list_tools() -> FnResult<Json<ListToolsResult>> {
+pub(crate) fn describe() -> Result<ListToolsResult, Error> {
     let mut tools = Vec::new();
 
     // getTasksInformation tool
@@ -203,19 +202,17 @@ pub fn list_tools() -> FnResult<Json<ListToolsResult>> {
         },
     });
 
-    Ok(Json(ListToolsResult { tools }))
+    Ok(ListToolsResult { tools })
 }
 
-#[plugin_fn]
-pub fn call(input: Json<CallToolRequest>) -> FnResult<Json<CallToolResult>> {
-    let input = input.0;
+pub(crate) fn call(input: CallToolRequest) -> Result<CallToolResult, Error> {
     match input.params.name.as_str() {
         "getTasksInformation" => get_tasks_information(input),
         "getIssueById" => get_issue_by_id(input),
         "createIssue" => create_issue(input),
         "updateIssue" => update_issue(input),
         "getCustomFields" => get_custom_fields(input),
-        _ => Ok(Json(CallToolResult {
+        _ => Ok(CallToolResult {
             is_error: Some(true),
             content: vec![Content {
                 annotations: None,
@@ -224,16 +221,16 @@ pub fn call(input: Json<CallToolRequest>) -> FnResult<Json<CallToolResult>> {
                 r#type: ContentType::Text,
                 data: None,
             }],
-        })),
+        }),
     }
 }
 
-fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
+fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
     let (base_url, api_token) = match get_youtrack_config() {
         Ok(config) => config,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -242,7 +239,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -250,7 +247,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
     let board_name = match args.get("name") {
         Some(JsonValue::String(s)) if !s.is_empty() => s,
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -259,7 +256,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -278,7 +275,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
     let boards_response = match http::request::<()>(&req, None) {
         Ok(res) => res,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -287,14 +284,14 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let boards: Vec<JsonValue> = match serde_json::from_slice(&boards_response.body()) {
         Ok(b) => b,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -303,7 +300,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -328,7 +325,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
             (board_id, sprint_id)
         }
         None => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -337,7 +334,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -362,7 +359,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
     let issues_response = match http::request::<()>(&req, None) {
         Ok(res) => res,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -371,14 +368,14 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let issues: Vec<JsonValue> = match serde_json::from_slice(&issues_response.body()) {
         Ok(i) => i,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -387,7 +384,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -487,7 +484,7 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
         ));
     }
 
-    Ok(Json(CallToolResult {
+    Ok(CallToolResult {
         is_error: None,
         content: vec![Content {
             annotations: None,
@@ -496,15 +493,15 @@ fn get_tasks_information(input: CallToolRequest) -> FnResult<Json<CallToolResult
             r#type: ContentType::Text,
             data: None,
         }],
-    }))
+    })
 }
 
-fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
+fn get_issue_by_id(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
     let (base_url, api_token) = match get_youtrack_config() {
         Ok(config) => config,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -513,14 +510,14 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let issue_id = match args.get("issue_id") {
         Some(JsonValue::String(s)) if !s.is_empty() => s,
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -529,7 +526,7 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -546,7 +543,7 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
     let response = match http::request::<()>(&req, None) {
         Ok(res) => {
             if res.status_code() >= 400 {
-                return Ok(Json(CallToolResult {
+                return Ok(CallToolResult {
                     is_error: Some(true),
                     content: vec![Content {
                         annotations: None,
@@ -559,12 +556,12 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                         r#type: ContentType::Text,
                         data: None,
                     }],
-                }));
+                });
             }
             res
         }
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -573,14 +570,14 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let issue: JsonValue = match serde_json::from_slice(&response.body()) {
         Ok(i) => i,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -589,7 +586,7 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -664,7 +661,7 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
         }
     }
 
-    Ok(Json(CallToolResult {
+    Ok(CallToolResult {
         is_error: None,
         content: vec![Content {
             annotations: None,
@@ -673,15 +670,15 @@ fn get_issue_by_id(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
             r#type: ContentType::Text,
             data: None,
         }],
-    }))
+    })
 }
 
-fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
+fn create_issue(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
     let (base_url, api_token) = match get_youtrack_config() {
         Ok(config) => config,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -690,14 +687,14 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let project = match args.get("project") {
         Some(JsonValue::String(s)) if !s.is_empty() => s,
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -706,14 +703,14 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let summary = match args.get("summary") {
         Some(JsonValue::String(s)) if !s.is_empty() => s,
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -722,7 +719,7 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -750,7 +747,7 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
         Ok(res) => {
             if res.status_code() >= 400 {
                 let body_str = String::from_utf8_lossy(&res.body()).to_string();
-                return Ok(Json(CallToolResult {
+                return Ok(CallToolResult {
                     is_error: Some(true),
                     content: vec![Content {
                         annotations: None,
@@ -763,12 +760,12 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                         r#type: ContentType::Text,
                         data: None,
                     }],
-                }));
+                });
             }
             res
         }
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -777,14 +774,14 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let issue: JsonValue = match serde_json::from_slice(&response.body()) {
         Ok(i) => i,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -793,7 +790,7 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -802,7 +799,7 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
         .and_then(|v| v.as_str())
         .unwrap_or("Unknown");
 
-    Ok(Json(CallToolResult {
+    Ok(CallToolResult {
         is_error: None,
         content: vec![Content {
             annotations: None,
@@ -811,15 +808,15 @@ fn create_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
             r#type: ContentType::Text,
             data: None,
         }],
-    }))
+    })
 }
 
-fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
+fn update_issue(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
     let (base_url, api_token) = match get_youtrack_config() {
         Ok(config) => config,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -828,14 +825,14 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let issue_id = match args.get("issue_id") {
         Some(JsonValue::String(s)) if !s.is_empty() => s,
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -844,7 +841,7 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -867,7 +864,7 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
     }
 
     if !has_updates {
-        return Ok(Json(CallToolResult {
+        return Ok(CallToolResult {
             is_error: Some(true),
             content: vec![Content {
                 annotations: None,
@@ -878,7 +875,7 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                 r#type: ContentType::Text,
                 data: None,
             }],
-        }));
+        });
     }
 
     let update_url = format!("{}/issues/{}", base_url, issue_id);
@@ -891,7 +888,7 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
         Ok(res) => {
             if res.status_code() >= 400 {
                 let body_str = String::from_utf8_lossy(&res.body()).to_string();
-                return Ok(Json(CallToolResult {
+                return Ok(CallToolResult {
                     is_error: Some(true),
                     content: vec![Content {
                         annotations: None,
@@ -904,11 +901,11 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                         r#type: ContentType::Text,
                         data: None,
                     }],
-                }));
+                });
             }
         }
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -917,11 +914,11 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     }
 
-    Ok(Json(CallToolResult {
+    Ok(CallToolResult {
         is_error: None,
         content: vec![Content {
             annotations: None,
@@ -930,15 +927,15 @@ fn update_issue(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
             r#type: ContentType::Text,
             data: None,
         }],
-    }))
+    })
 }
 
-fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
+fn get_custom_fields(input: CallToolRequest) -> Result<CallToolResult, Error> {
     let args = input.params.arguments.unwrap_or_default();
     let (base_url, api_token) = match get_youtrack_config() {
         Ok(config) => config,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -947,14 +944,14 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let project = match args.get("project") {
         Some(JsonValue::String(s)) if !s.is_empty() => s,
         _ => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -963,7 +960,7 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -980,7 +977,7 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
     let response = match http::request::<()>(&req, None) {
         Ok(res) => {
             if res.status_code() >= 400 {
-                return Ok(Json(CallToolResult {
+                return Ok(CallToolResult {
                     is_error: Some(true),
                     content: vec![Content {
                         annotations: None,
@@ -993,12 +990,12 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                         r#type: ContentType::Text,
                         data: None,
                     }],
-                }));
+                });
             }
             res
         }
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -1007,14 +1004,14 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
     let fields: Vec<JsonValue> = match serde_json::from_slice(&response.body()) {
         Ok(f) => f,
         Err(e) => {
-            return Ok(Json(CallToolResult {
+            return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
@@ -1023,7 +1020,7 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
                     r#type: ContentType::Text,
                     data: None,
                 }],
-            }));
+            });
         }
     };
 
@@ -1062,7 +1059,7 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
         report.push(format!("| {} | {} | {} |", name, field_type, values));
     }
 
-    Ok(Json(CallToolResult {
+    Ok(CallToolResult {
         is_error: None,
         content: vec![Content {
             annotations: None,
@@ -1071,7 +1068,7 @@ fn get_custom_fields(input: CallToolRequest) -> FnResult<Json<CallToolResult>> {
             r#type: ContentType::Text,
             data: None,
         }],
-    }))
+    })
 }
 
 fn format_timestamp(timestamp_ms: i64) -> String {
