@@ -247,4 +247,31 @@ cargo test
 
 ## License
 
-This project is licensed under the same license as the hyper-mcp project.
+MIT License.
+
+## Tasks
+
+### build:images
+
+Build docker images of plugins
+
+interactive: true
+
+```bash
+docker build -t ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest .
+```
+
+### push:images
+
+Push docker images of plugins
+
+interactive: true
+
+```bash
+
+docker push ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest
+cosign sign --yes ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest
+MANIFEST_TAG="ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest"
+docker manifest create "$MANIFEST_TAG" "ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest" && docker manifest push "$MANIFEST_TAG" || echo "Skipping manifest for perplexity-search"
+
+``` 

@@ -1,0 +1,19 @@
+[package]
+edition = "2021"
+name = "logseq"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+name = "plugin"
+
+[dependencies]
+extism-pdk = "1.2.1"
+serde = {version = "1.0", features = ["derive"]}
+serde_json = "1.0"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+strip = true

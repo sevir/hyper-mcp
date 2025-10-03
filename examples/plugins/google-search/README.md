@@ -23,7 +23,7 @@ Before using this plugin, you need to:
    - Copy the generated API key
 
 4. **Create a Custom Search Engine**:
-   - Go to [Programmable Search Engine](https://cse.google.com/)
+   - Go to [Programmable Search Engine](https://programmablesearchengine.google.com/)
    - Click "New search engine"
    - Configure your search engine (you can search the entire web or specific sites)
    - Get your Search Engine ID from the "Setup" tab
@@ -216,4 +216,31 @@ docker run -p 3000:3000 google-search-plugin
 
 ## License
 
-This plugin is part of the hyper-mcp project and follows the same license terms.
+MIT License
+
+## Tasks
+
+### build:images
+
+Build docker images of plugins
+
+interactive: true
+
+```bash
+docker build --rebuild -t ghcr.io/sevir/hyper-mcp/plugin-google-search:latest .
+```
+
+### push:images
+
+Push docker images of plugins
+
+interactive: true
+
+```bash
+
+docker push ghcr.io/sevir/hyper-mcp/plugin-google-search:latest
+cosign sign --yes ghcr.io/sevir/hyper-mcp/plugin-google-search:latest
+MANIFEST_TAG="ghcr.io/sevir/hyper-mcp/plugin-google-search:latest"
+docker manifest create "$MANIFEST_TAG" "ghcr.io/sevir/hyper-mcp/plugin-google-search:latest" && docker manifest push "$MANIFEST_TAG" || echo "Skipping manifest for google-search"
+
+``` 

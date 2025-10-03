@@ -187,3 +187,31 @@ This plugin uses DuckDuckGo's public API, which:
 ## License
 
 This project is licensed under the same license as the hyper-mcp project.
+
+
+## Tasks
+
+### build:images
+
+Build docker images of plugins
+
+interactive: true
+
+```bash
+docker build -t ghcr.io/sevir/hyper-mcp/plugin-duckduckgo-search:latest .
+```
+
+### push:images
+
+Push docker images of plugins
+
+interactive: true
+
+```bash
+
+docker push ghcr.io/sevir/hyper-mcp/plugin-duckduckgo-search:latest
+cosign sign --yes ghcr.io/sevir/hyper-mcp/plugin-duckduckgo-search:latest
+MANIFEST_TAG="ghcr.io/sevir/hyper-mcp/plugin-duckduckgo-search:latest"
+docker manifest create "$MANIFEST_TAG" "ghcr.io/sevir/hyper-mcp/plugin-duckduckgo-search:latest" && docker manifest push "$MANIFEST_TAG" || echo "Skipping manifest for duckduckgo-search"
+
+``` 

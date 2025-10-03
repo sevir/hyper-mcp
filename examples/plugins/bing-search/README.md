@@ -228,3 +228,30 @@ Check the [Azure Pricing Calculator](https://azure.microsoft.com/en-us/pricing/c
 ## License
 
 This plugin is part of the hyper-mcp project and follows the same license terms.
+
+## Tasks
+
+### build:images
+
+Build docker images of plugins
+
+interactive: true
+
+```bash
+docker build -t ghcr.io/sevir/hyper-mcp/plugin-bing-search:latest .
+```
+
+### push:images
+
+Push docker images of plugins
+
+interactive: true
+
+```bash
+
+docker push ghcr.io/sevir/hyper-mcp/plugin-bing-search:latest
+cosign sign --yes ghcr.io/sevir/hyper-mcp/plugin-bing-search:latest
+MANIFEST_TAG="ghcr.io/sevir/hyper-mcp/plugin-bing-search:latest"
+docker manifest create "$MANIFEST_TAG" "ghcr.io/sevir/hyper-mcp/plugin-bing-search:latest" && docker manifest push "$MANIFEST_TAG" || echo "Skipping manifest for bing-search"
+
+``` 

@@ -33,6 +33,34 @@
         },
         "allowed_hosts": ["google.serper.dev"]
       }
+    },
+    "perplexity": {
+      "url": "oci://ghcr.io/sevir/hyper-mcp/plugin-perplexity-search:latest",
+      "runtime_config": {
+        "env_vars": {
+          "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}"
+        },
+        "allowed_hosts": ["api.perplexity.ai"]
+      }
+    },
+    "google": {
+      "url": "oci://ghcr.io/sevir/hyper-mcp/plugin-google-search:latest",
+      "runtime_config": {
+        "env_vars": {
+          "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+          "GOOGLE_SEARCH_ENGINE_ID": "${GOOGLE_SEARCH_ENGINE_ID}"
+        },
+        "allowed_hosts": ["www.googleapis.com"]
+      }
+    },
+    "brave": {
+      "url": "oci://ghcr.io/sevir/hyper-mcp/plugin-brave-search:latest",
+      "runtime_config": {
+        "env_vars": {
+          "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+        },
+        "allowed_hosts": ["api.search.brave.com"]
+      }
     }
   }
 }
