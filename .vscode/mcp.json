@@ -5,7 +5,7 @@
 			"command": "hyper-mcp",
 			"args": [
 				"--config-file",
-				".ai/hyper-mcp.json"
+				".ai/hyper-mcp.yaml"
 			],
 			"env": {
 				"SERPER_API_KEY": "${input:serper-api-key}",
