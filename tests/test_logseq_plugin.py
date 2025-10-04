@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Integration test for the Logseq plugin via hyper-mcp.
 
-This script spins up a fake Logseq HTTP API, launches the hyper-mcp server
-with the repository's `.ai/hyper-mcp.yaml` configuration, and exercises the
-`logseq-search_pages` tool with a sample query.
+This script can run in two modes:
+1. Fake server mode (default): Spins up a fake Logseq HTTP API server and tests the plugin
+2. Real server mode (--use-real-logseq): Uses a real Logseq server running on localhost:12315
+
+In both modes, it launches the hyper-mcp server with the repository's `.ai/hyper-mcp.yaml`
+configuration and exercises the `logseq-search_pages` tool with a sample query.
 """
 from __future__ import annotations
 
@@ -57,19 +60,29 @@ class FakeLogseqServer:
                     return
 
                 method = payload.get("method")
-                if method == "logseq.DB.datascriptQuery":
+                if method == "logseq.search":
                     query_text = payload.get("args", [""])[0]
                     response_body: Any = [
-                        [
-                            {
-                                "name": "Prácticas en empresa 25",
+                        {
+                            "content": f"This is content containing {query_text}",
+                            "page": {
+                                "name": "Test Page",
                                 "id": 424242,
-                                "uuid": "fake-uuid-123",
-                                "properties": {
-                                    "query": query_text,
-                                },
-                            }
-                        ]
+                                "uuid": "fake-uuid-123"
+                            },
+                            "type": "block",
+                            "id": 12345
+                        },
+                        {
+                            "content": f"Another block with {query_text} in it",
+                            "page": {
+                                "name": "Another Page",
+                                "id": 424243,
+                                "uuid": "fake-uuid-456"
+                            },
+                            "type": "block",
+                            "id": 12346
+                        }
                     ]
                 else:
                     response_body = None
@@ -287,7 +300,7 @@ def extract_text_from_call(result: Dict[str, Any]) -> str:
     return "\n".join(pieces)
 
 
-async def run_integration_test() -> None:
+async def run_integration_test(use_fake_server: bool = True) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     config_path = repo_root / ".ai" / "hyper-mcp.yaml"
     if not config_path.is_file():
@@ -295,8 +308,9 @@ async def run_integration_test() -> None:
 
     binary_path = find_hyper_mcp_binary(repo_root)
 
-    fake_logseq = FakeLogseqServer()
-    fake_logseq.start()
+    fake_logseq = FakeLogseqServer() if use_fake_server else None
+    if fake_logseq:
+        fake_logseq.start()
 
     try:
         async with MCPStdioClient(binary_path, config_path, repo_root) as client:
@@ -320,14 +334,19 @@ async def run_integration_test() -> None:
                 raise MCPClientError(f"Tool returned error: {call_response}")
 
             made_text = extract_text_from_call(call_response)
-            if "Prácticas en empresa 25" not in made_text:
+            print("🔍 Search Results for 'Prácticas en empresa 25':")
+            print("=" * 50)
+            print(made_text)
+            print("=" * 50)
+
+            if use_fake_server and "Prácticas en empresa 25" not in made_text:
                 raise MCPClientError(
                     "Tool response does not contain expected query text")
 
-            print("✔ logseq-search_pages returned expected content")
-            print(made_text)
+            print("✔ logseq-search_pages test completed successfully")
     finally:
-        fake_logseq.stop()
+        if fake_logseq:
+            fake_logseq.stop()
 
 
 def main() -> None:
@@ -337,13 +356,18 @@ def main() -> None:
         action="store_true",
         help="Validate prerequisites but skip running the integration test.",
     )
+    parser.add_argument(
+        "--use-real-logseq",
+        action="store_true",
+        help="Use real Logseq server running on localhost:12315 instead of fake server.",
+    )
     args = parser.parse_args()
 
     if args.skip_run:
         print("Skipping run as requested; prerequisites look good.")
         return
 
-    asyncio.run(run_integration_test())
+    asyncio.run(run_integration_test(use_fake_server=not args.use_real_logseq))
 
 
 if __name__ == "__main__":

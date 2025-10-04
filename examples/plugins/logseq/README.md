@@ -8,7 +8,7 @@ This plugin allows you to interact with your Logseq knowledge base through its H
 
 ## Features
 
-- Search pages by name or content
+- Search across all pages and blocks for content
 - Retrieve hierarchical block structures
 - Get specific blocks with optional children
 - Explore page references recursively
@@ -60,10 +60,10 @@ The plugin requires the following configuration:
 
 ### 1. search_pages
 
-Search for pages in Logseq by name or content.
+Search for content across all Logseq pages and blocks.
 
 **Parameters:**
-- `query` (string, required): Search query for finding pages
+- `query` (string, required): Search query for finding content
 
 **Example:**
 ```json
@@ -195,7 +195,7 @@ For more information about the Logseq API, see:
 Search for a topic, then explore all references:
 
 ```json
-// First, search for pages about "AI"
+// First, search for content about "AI"
 {
   "name": "search_pages",
   "arguments": { "query": "AI" }
