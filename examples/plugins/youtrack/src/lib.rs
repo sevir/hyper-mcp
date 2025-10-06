@@ -32,24 +32,34 @@ pub(crate) fn describe() -> Result<ListToolsResult, Error> {
         },
     );
     tasks_properties.insert(
-        "num_comments".to_string(),
+        "id".to_string(),
+        PropertySchema {
+            property_type: "string".to_string(),
+            description: "The ID of the agile board to query".to_string(),
+            default: None,
+            items: None,
+        },
+    );
+    tasks_properties.insert(
+        "num_entries".to_string(),
         PropertySchema {
             property_type: "integer".to_string(),
-            description: "Number of latest comments to retrieve per task (default: 1, 0 for none)"
-                .to_string(),
-            default: Some(json!(1)),
+            description:
+                "Number of latest comments to retrieve per task (default: 10000, 0 for none)"
+                    .to_string(),
+            default: Some(json!(10000)),
             items: None,
         },
     );
 
     tools.push(ToolDescription {
         name: "getTasksInformation".to_string(),
-        description: "Read the Agile Panel from YouTrack, obtaining information about all the in-progress tasks and returns a markdown report detailing them. Includes task ID, summary, assignee, state, estimated vs spent time, time since last update, and recent comments."
+        description: "Read the Agile Panel from YouTrack, obtaining information about all the in-progress tasks and returns a markdown report detailing them. Provide either the board name or board ID to identify the agile board. Includes task ID, summary, assignee, state, estimated vs spent time, time since last update, and recent comments."
             .to_string(),
         input_schema: InputSchema {
             schema_type: "object".to_string(),
             properties: tasks_properties,
-            required: Some(vec!["name".to_string()]),
+            required: None, // Allow either name or id
         },
     });
 
@@ -244,29 +254,36 @@ fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error
     };
 
     // Extract parameters
-    let board_name = match args.get("name") {
-        Some(JsonValue::String(s)) if !s.is_empty() => s,
-        _ => {
-            return Ok(CallToolResult {
-                is_error: Some(true),
-                content: vec![Content {
-                    annotations: None,
-                    text: Some("Missing required parameter: name".to_string()),
-                    mime_type: None,
-                    r#type: ContentType::Text,
-                    data: None,
-                }],
-            });
-        }
-    };
+    let board_name = args.get("name").and_then(|v| v.as_str());
+    let board_id_param = args.get("id").and_then(|v| v.as_str());
 
-    let num_comments = args
-        .get("num_comments")
+    // Require at least one of name or id
+    if board_name.is_none() && board_id_param.is_none() {
+        return Ok(CallToolResult {
+            is_error: Some(true),
+            content: vec![Content {
+                annotations: None,
+                text: Some(
+                    "Missing required parameter: either 'name' or 'id' must be provided"
+                        .to_string(),
+                ),
+                mime_type: None,
+                r#type: ContentType::Text,
+                data: None,
+            }],
+        });
+    }
+
+    let num_entries = args
+        .get("num_entries")
         .and_then(|v| v.as_i64())
-        .unwrap_or(1);
+        .unwrap_or(10000);
 
     // Step 1: Find the board by name
-    let boards_url = format!("{}/agiles?fields=id,name,currentSprint(id)", base_url);
+    let boards_url = format!(
+        "{}/agiles?fields=id,name,currentSprint(id)&$top=10000",
+        base_url
+    );
     let req = HttpRequest::new(&boards_url)
         .with_method("GET")
         .with_header("Authorization", &format!("Bearer {}", api_token))
@@ -305,10 +322,19 @@ fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error
     };
 
     let board = boards.iter().find(|b| {
-        b.get("name")
-            .and_then(|n| n.as_str())
-            .map(|n| n == board_name)
-            .unwrap_or(false)
+        let matches_name = board_name.map_or(false, |name| {
+            b.get("name")
+                .and_then(|n| n.as_str())
+                .map(|n| n == name)
+                .unwrap_or(false)
+        });
+        let matches_id = board_id_param.map_or(false, |id| {
+            b.get("id")
+                .and_then(|i| i.as_str())
+                .map(|i| i == id)
+                .unwrap_or(false)
+        });
+        matches_name || matches_id
     });
 
     let (board_id, sprint_id) = match board {
@@ -325,12 +351,29 @@ fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error
             (board_id, sprint_id)
         }
         None => {
+            // Board not found, return list of available boards
+            let mut board_list = Vec::new();
+            board_list.push("# Available Agile Boards".to_string());
+            board_list.push(String::new());
+            board_list.push("| ID | Name |".to_string());
+            board_list.push("|---|---|".to_string());
+
+            for board in &boards {
+                let id = board.get("id").and_then(|v| v.as_str()).unwrap_or("N/A");
+                let name = board.get("name").and_then(|v| v.as_str()).unwrap_or("N/A");
+                board_list.push(format!("| {} | {} |", id, name));
+            }
+
+            board_list.push(String::new());
+            board_list
+                .push("**Board not found.** Please use one of the IDs or names above.".to_string());
+
             return Ok(CallToolResult {
                 is_error: Some(true),
                 content: vec![Content {
                     annotations: None,
-                    text: Some(format!("Board '{}' not found", board_name)),
-                    mime_type: None,
+                    text: Some(board_list.join("\n")),
+                    mime_type: Some("text/markdown".to_string()),
                     r#type: ContentType::Text,
                     data: None,
                 }],
@@ -344,8 +387,8 @@ fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error
         base_url,
         board_id,
         sprint_id,
-        if num_comments > 0 {
-            format!("&$top={}", num_comments)
+        if num_entries > 0 {
+            format!("&$top={}", num_entries)
         } else {
             String::new()
         }
@@ -389,8 +432,13 @@ fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error
     };
 
     // Format the response
+    let board_display_name = board
+        .and_then(|b| b.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("Unknown Board");
+
     let mut report = Vec::new();
-    report.push(format!("# Tasks Report - {}", board_name));
+    report.push(format!("# Tasks Report - {}", board_display_name));
     report.push(String::new());
     report.push(format!("## 📊 Summary"));
     report.push(format!("- **Total tasks in progress:** {}", issues.len()));
@@ -450,13 +498,13 @@ fn get_tasks_information(input: CallToolRequest) -> Result<CallToolResult, Error
             .map(|ts| format_timestamp(ts))
             .unwrap_or_else(|| "N/A".to_string());
 
-        let comments_text = if num_comments > 0 {
+        let comments_text = if num_entries > 0 {
             issue
                 .get("comments")
                 .and_then(|c| c.as_array())
                 .map(|arr| {
                     arr.iter()
-                        .take(num_comments as usize)
+                        .take(num_entries as usize)
                         .filter_map(|c| {
                             let author = c
                                 .get("author")

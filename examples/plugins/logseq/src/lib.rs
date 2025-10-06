@@ -65,7 +65,7 @@ pub(crate) fn describe() -> Result<ListToolsResult, Error> {
 
     tools.push(ToolDescription {
         name: "search_pages".to_string(),
-        description: "Search for content across all Logseq pages and blocks. Returns matching content with page and block information.".to_string(),
+        description: "Search for pages in Logseq by name or content. Returns a list of matching pages with their IDs and names.".to_string(),
         input_schema: InputSchema {
             schema_type: "object".to_string(),
             properties: search_properties,
@@ -200,63 +200,37 @@ fn format_block_hierarchy(block: &JsonValue, level: usize) -> String {
 }
 
 fn search_pages(query: &str) -> Result<String, Error> {
-    // Use the proper Logseq search API to search across all content
-    let result = make_logseq_query("logseq.search", vec![json!(query), json!({})])?;
+    // Use datascript query to search pages
+    let datascript_query = format!(
+        "[:find (pull ?p [*]) :where [?p :block/name ?name] [(re-find #\"(?i){}\" ?name)]]",
+        query.replace("\"", "\\\"")
+    );
+
+    let result = make_logseq_query("logseq.DB.datascriptQuery", vec![json!(datascript_query)])?;
 
     let mut output = format!("# Search Results for \"{}\"\n\n", query);
 
-    // Handle the actual Logseq API response format
-    if let Some(blocks) = result.get("blocks").and_then(|v| v.as_array()) {
-        if blocks.is_empty() {
-            output.push_str("No blocks found matching the query.\n");
+    if let Some(results) = result.as_array() {
+        if results.is_empty() {
+            output.push_str("No pages found matching the query.\n");
         } else {
-            output.push_str(&format!(
-                "Found {} block(s) matching the query:\n\n",
-                blocks.len()
-            ));
-            for (idx, block) in blocks.iter().enumerate() {
-                if let Some(block_obj) = block.as_object() {
-                    let content = block_obj
-                        .get("block/content")
+            output.push_str(&format!("Found {} page(s):\n\n", results.len()));
+            for (idx, item) in results.iter().enumerate() {
+                if let Some(page) = item.get(0) {
+                    let name = page
+                        .get("name")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("No content");
+                        .unwrap_or("Unknown");
+                    let id = page
+                        .get("id")
+                        .and_then(|v| v.as_i64())
+                        .map(|i| i.to_string())
+                        .unwrap_or_else(|| "N/A".to_string());
 
-                    let page_id = block_obj
-                        .get("block/page")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-
-                    output.push_str(&format!("{}. **Block** (Page ID: {})\n", idx + 1, page_id));
-                    output.push_str(&format!("   {}\n\n", content));
+                    output.push_str(&format!("{}. **{}** (ID: {})\n", idx + 1, name, id));
                 }
             }
         }
-    }
-
-    // Also handle pages-content if present
-    if let Some(pages_content) = result.get("pages-content").and_then(|v| v.as_array()) {
-        if !pages_content.is_empty() {
-            output.push_str(&format!(
-                "Found {} page content(s) matching the query:\n\n",
-                pages_content.len()
-            ));
-            for (idx, page) in pages_content.iter().enumerate() {
-                if let Some(page_obj) = page.as_object() {
-                    let snippet = page_obj
-                        .get("block/snippet")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("No snippet");
-
-                    output.push_str(&format!("{}. **Page Content**\n", idx + 1));
-                    output.push_str(&format!("   {}\n\n", snippet));
-                }
-            }
-        }
-    }
-
-    // If neither blocks nor pages-content are present, show unexpected format
-    if result.get("blocks").is_none() && result.get("pages-content").is_none() {
-        output.push_str("Unexpected search result format.\n");
     }
 
     Ok(output)
