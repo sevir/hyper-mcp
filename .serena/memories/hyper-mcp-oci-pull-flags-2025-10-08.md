@@ -1,0 +1,1 @@
+Added investigation note: Found OCI image handling and signature verification in `src/oci.rs` (verify_image_signature and pull_and_extract_oci_image). Implemented CLI flags `--force-oci-pull` and `--verify-cached-oci-signature` to force re-download or verify remote signature and re-pull if invalid. Build completed. Location: src/main.rs and src/oci.rs.

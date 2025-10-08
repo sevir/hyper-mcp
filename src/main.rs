@@ -55,6 +55,22 @@ struct Cli {
     insecure_skip_signature: bool,
 
     #[arg(
+        long = "force-oci-pull",
+        help = "Force re-download of OCI images even if a cached copy exists",
+        env = "HYPER_MCP_FORCE_OCI_PULL",
+        default_value = "false"
+    )]
+    force_oci_pull: bool,
+
+    #[arg(
+        long = "verify-cached-oci-signature",
+        help = "When a cached OCI plugin exists, verify the remote image signature and re-pull if verification fails",
+        env = "HYPER_MCP_VERIFY_CACHED_OCI_SIGNATURE",
+        default_value = "false"
+    )]
+    verify_cached_oci_signature: bool,
+
+    #[arg(
         long = "use-sigstore-tuf-data",
         help = "Use Sigstore TUF data for verification",
         env = "HYPER_MCP_USE_SIGSTORE_TUF_DATA",

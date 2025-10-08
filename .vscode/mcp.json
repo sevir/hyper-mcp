@@ -5,7 +5,8 @@
 			"command": "hyper-mcp",
 			"args": [
 				"--config-file",
-				".ai/hyper-mcp.yaml"
+				".ai/hyper-mcp.yaml",
+				"--verify-cached-oci-signature"
 			],
 			"env": {
 				"SERPER_API_KEY": "${input:serper-api-key}",

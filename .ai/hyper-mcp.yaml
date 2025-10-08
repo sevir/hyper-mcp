@@ -47,20 +47,20 @@ plugins:
         BRAVE_API_KEY: "${BRAVE_API_KEY}"
       allowed_hosts:
         - api.search.brave.com
-  # logseq:
-  #   url: oci://ghcr.io/sevir/hyper-mcp/plugin-logseq:latest
-  #   #url: file:///www/MCP/hyper-mcp/examples/plugins/logseq/target/wasm32-wasip1/release/plugin.wasm
-  #   runtime_config:
-  #     env_vars:
-  #       LOGSEQ_API_KEY: "idi"
-  #       LOGSEQ_BASE_URL: "http://127.0.0.1:12315"
-  #     allowed_hosts:
-  #       - localhost:12315
-  #       - 127.0.0.1:12315
-  #       - http://localhost:12315
-  #       - http://127.0.0.1:12315
-  #       - localhost
-  #       - 127.0.0.1
+  logseq:
+    url: oci://ghcr.io/sevir/hyper-mcp/plugin-logseq:latest
+    #url: file:///www/MCP/hyper-mcp/examples/plugins/logseq/target/wasm32-wasip1/release/plugin.wasm
+    runtime_config:
+      env_vars:
+        LOGSEQ_API_KEY: "idi"
+        LOGSEQ_BASE_URL: "http://127.0.0.1:12315"
+      allowed_hosts:
+        - localhost:12315
+        - 127.0.0.1:12315
+        - http://localhost:12315
+        - http://127.0.0.1:12315
+        - localhost
+        - 127.0.0.1
   youtrack:
     #url: oci://ghcr.io/sevir/hyper-mcp/plugin-youtrack:latest
     url: file:///www/MCP/hyper-mcp/examples/plugins/youtrack/target/wasm32-wasip1/release/plugin.wasm

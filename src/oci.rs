@@ -221,11 +221,47 @@ pub async fn pull_and_extract_oci_image(
     target_file_path: &str,
     local_output_path: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // If cached file exists, decide whether to skip pulling based on CLI flags.
     if Path::new(local_output_path).exists() {
-        tracing::info!(
-            "Plugin {image_reference} already cached at: {local_output_path}. Skipping downloading."
-        );
-        return Ok(());
+        tracing::info!("Plugin {image_reference} already cached at: {local_output_path}.");
+
+        // If force pull is enabled, remove the cache and continue to re-download
+        if cli.force_oci_pull {
+            tracing::info!("force-oci-pull enabled, re-downloading {image_reference}");
+            // attempt to remove cached file, but continue even if removal fails
+            let _ = std::fs::remove_file(local_output_path);
+        } else if cli.verify_cached_oci_signature {
+            // If verification of cached copy is requested, verify remote signature and re-pull if invalid
+            tracing::info!(
+                "verify-cached-oci-signature enabled, verifying remote signature for {image_reference}"
+            );
+            match verify_image_signature(cli, image_reference).await {
+                Ok(verified) => {
+                    if !verified {
+                        tracing::warn!(
+                            "Cached plugin signature verification failed for {image_reference}, re-downloading"
+                        );
+                        let _ = std::fs::remove_file(local_output_path);
+                    } else {
+                        tracing::info!(
+                            "Remote signature verification succeeded; using cached copy"
+                        );
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to verify remote signature: {e}. Re-downloading {image_reference}"
+                    );
+                    let _ = std::fs::remove_file(local_output_path);
+                }
+            }
+        } else {
+            tracing::info!(
+                "Skipping download; to force re-download use --force-oci-pull or enable --verify-cached-oci-signature"
+            );
+            return Ok(());
+        }
     }
 
     tracing::info!("Pulling {image_reference} ...");
