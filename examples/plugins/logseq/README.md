@@ -14,6 +14,7 @@ This plugin allows you to interact with your Logseq knowledge base through its H
 - Explore page references recursively
 - Extract complete page content with metadata
 - Build knowledge graphs by following references
+- Explore a topic end-to-end: search a page, extract its references, and read all related pages in one call (`explore_page`)
 
 ## Prerequisites
 
@@ -153,6 +154,44 @@ Get the complete content of a page including metadata and all blocks.
 }
 ```
 
+### 6. explore_page
+
+AI-friendly knowledge exploration in a single call: resolve a search term to the
+best matching page, read its full content, extract the pages it references, and
+recursively read those related pages up to a given depth. Returns one
+consolidated markdown document — ideal for using your Logseq notes as a
+navigable knowledge source.
+
+**Parameters:**
+- `query` (string, required): Page name or search term. Resolved to the best matching page (exact match first, then case-insensitive search).
+- `depth` (integer, optional): How many reference hops to follow from the starting page (default: 1, recommended max: 2).
+- `max_pages` (integer, optional): Maximum number of pages to read in total, to keep the result bounded (default: 10).
+- `include_backlinks` (boolean, optional): Also follow pages that reference the starting page, not only outgoing references (default: false).
+
+**Example:**
+```json
+{
+  "name": "explore_page",
+  "arguments": {
+    "query": "Knowledge Management",
+    "depth": 1,
+    "max_pages": 10,
+    "include_backlinks": false
+  }
+}
+```
+
+**What it does, step by step:**
+1. Resolves `query` to a real page name.
+2. Reads the page content as a hierarchical block tree (`getPageBlocksTree`).
+3. Extracts the pages referenced by that page (outgoing `[[links]]` and `#tags`), and optionally the backlinks.
+4. Reads each related page, following references breadth-first up to `depth`, skipping already-visited pages and stopping at `max_pages`.
+
+**Use Cases:**
+- "Give me everything related to X" in one request.
+- Let an AI navigate connected notes without orchestrating multiple tool calls.
+- Build a consolidated context document around a topic.
+
 ## Building and Publishing
 
 ### Build the Plugin
@@ -182,7 +221,8 @@ This plugin uses the following Logseq API methods:
 
 - `logseq.Editor.getPage` - Retrieve page information
 - `logseq.Editor.getBlock` - Get block content with children
-- `logseq.DB.datascriptQuery` - Query the Logseq database with Datalog
+- `logseq.Editor.getPageBlocksTree` - Get a page's blocks as a real parent/child tree
+- `logseq.DB.datascriptQuery` - Query the Logseq database with Datalog (references, backlinks, search)
 
 For more information about the Logseq API, see:
 - [Logseq Plugin API Documentation](https://logseq.github.io/plugins/)
